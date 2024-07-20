@@ -1,5 +1,8 @@
-
 const port = 3000;
+
+let numberOfPlayers = 1;
+let players = {};
+
 const config = {
     type: Phaser.AUTO,
     width: 1280,
@@ -19,50 +22,21 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
 let player;
 let targetX, targetY;
 let moving = false;
 const speed = 160; // Vitesse du personnage
 
-const socket = io('http://localhost:'+port);
+const socket = io('http://localhost:' + port);
 
 socket.on("connect_error", (err) => {
-console.log(`connect_error due to ${err.message}`);
+    console.log(`connect_error due to ${err.message}`);
 });
 
 socket.on("connect", () => {
     console.log('Connecté au serveur');
 });
-
-  
-  // Quand un nouveau joueur rejoint
-  socket.on('playerJoined', (playerData) => {
-    // Ajoutez le nouveau joueur à votre jeu
-    addNewPlayerToGame(playerData);
-  });
-  
-  // Quand un joueur quitte
-  socket.on('playerLeft', (playerId) => {
-    // Supprimez le joueur de votre jeu
-    removePlayerFromGame(playerId);
-  });
-  
-  // Quand un joueur est mis à jour
-  socket.on('playerUpdated', (playerData) => {
-    // Mettez à jour la position ou d'autres données du joueur dans votre jeu
-    updatePlayerInGame(playerData);
-  });
-  
-  // Fonction pour envoyer les mises à jour de votre joueur
-  function sendPlayerUpdate() {
-    socket.emit('updatePlayer', {
-      x: playerX,
-      y: playerY,
-      // autres données mises à jour
-    });
-  }
-
-  
 
 function preload() {
     this.load.image('background', 'background.png');
@@ -72,6 +46,8 @@ function preload() {
 }
 
 function create() {
+    const self = this; // Référence à la scène actuelle
+
     // Ajoute l'image de fond
     this.add.image(640, 360, 'background');
 
@@ -80,12 +56,11 @@ function create() {
     platforms.create(640, 720, 'ground').setScale(2).refreshBody();
 
     player = this.physics.add.sprite(688, 231, 'dude');
-    socket.emit('newPlayer', { 
-        x: 688, 
-        y: 231, 
+    socket.emit('newPlayer', {
+        x: 688,
+        y: 231,
         // autres données du personnage
-      });
-
+    });
 
     player.setCollideWorldBounds(false); // Désactive la collision avec les bords du monde
     this.physics.add.collider(player, platforms); // Active la collision entre le joueur et les plateformes
@@ -97,6 +72,25 @@ function create() {
     });
 
     cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
+
+    // Quand un nouveau joueur rejoint
+    socket.on('playerJoined', (playerData) => {
+        numberOfPlayers++;
+        self.addNewPlayerToGame(playerData);
+    });
+
+    // Quand un joueur quitte
+    socket.on('playerLeft', (playerId) => {
+        self.removePlayerFromGame(playerId);
+    });
+
+    // Quand un joueur est mis à jour
+    socket.on('playerUpdated', (playerData) => {
+        self.updatePlayerInGame(playerData);
+        if (players[playerData.id]) {
+            players[playerData.id].setPosition(playerData.x, playerData.y);
+        }
+    });
 }
 
 function update() {
@@ -120,25 +114,58 @@ function update() {
             moving = false;
 
             // Sauvegarde de la position du joueur vers le backend
-            fetch('http://localhost:'+port+'/savePlayerPosition', {
+            fetch('http://localhost:' + port + '/savePlayerPosition', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ x: player.x, y: player.y }),
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Erreur lors de la sauvegarde de la position du joueur');
-                }
-                return response.text();
-            })
-            .then(data => {
-                console.log('Position du joueur sauvegardée avec succès:', data);
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erreur lors de la sauvegarde de la position du joueur');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    console.log('Position du joueur sauvegardée avec succès:', data);
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                });
         }
+
+        socket.emit('updatePlayer', {
+            id: player.playerId,
+            x: player.x,
+            y: player.y
+        });
+
     }
 }
+
+Phaser.Scene.prototype.addNewPlayerToGame = function (playerData) {
+    // Create a new player sprite
+    const newPlayer = this.physics.add.sprite(playerData.x, playerData.y, 'dude');
+    console.log(players);
+    // Set the player's properties based on playerData
+    newPlayer.setTint(playerData.color);
+    newPlayer.playerId = playerData.id;
+
+    // Add the new player to the players object
+    players[playerData.id] = newPlayer;
+};
+
+Phaser.Scene.prototype.removePlayerFromGame = function (playerId) {
+    if (players[playerId]) {
+        players[playerId].destroy();
+        delete players[playerId];
+    }
+};
+
+Phaser.Scene.prototype.updatePlayerInGame = function (playerData) {
+    if (players[playerData.id]) {
+        players[playerData.id].x = playerData.x;
+        players[playerData.id].y = playerData.y;
+    }
+};

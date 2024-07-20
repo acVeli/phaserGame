@@ -8,7 +8,7 @@ const io = require('socket.io')(http, {
     origin: '*',
   },
 });
-// Vos routes Express ici
+
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -48,6 +48,7 @@ io.on('connection', (socket) => {
       players[socket.id] = { ...players[socket.id], ...playerData };
       socket.broadcast.emit('playerUpdated', { id: socket.id, ...playerData });
     });
+    
   });
 
 
@@ -61,7 +62,7 @@ app.post('/savePlayerPosition', (req, res) => {
     res.send(`Position du joueur sauvegardée avec succès: x=${x}, y=${y}`);
 });
 
-// Endpoint pour charger la dernière position du joueur
+// Endpoint API pour charger la dernière position du joueur
 app.get('/getPlayerPosition', (req, res) => {
     res.json(savedPosition);
 });
