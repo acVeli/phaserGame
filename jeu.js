@@ -46,7 +46,6 @@ function preload() {
 }
 
 function create() {
-    const self = this; // Référence à la scène actuelle
 
     // Ajoute l'image de fond
     this.add.image(640, 360, 'background');
@@ -76,17 +75,17 @@ function create() {
     // Quand un nouveau joueur rejoint
     socket.on('playerJoined', (playerData) => {
         numberOfPlayers++;
-        self.addNewPlayerToGame(playerData);
+        this.addNewPlayerToGame(playerData);
     });
 
     // Quand un joueur quitte
     socket.on('playerLeft', (playerId) => {
-        self.removePlayerFromGame(playerId);
+        this.removePlayerFromGame(playerId);
     });
 
     // Quand un joueur est mis à jour
     socket.on('playerUpdated', (playerData) => {
-        self.updatePlayerInGame(playerData);
+        this.updatePlayerInGame(playerData);
         if (players[playerData.id]) {
             players[playerData.id].setPosition(playerData.x, playerData.y);
         }
@@ -169,3 +168,4 @@ Phaser.Scene.prototype.updatePlayerInGame = function (playerData) {
         players[playerData.id].y = playerData.y;
     }
 };
+

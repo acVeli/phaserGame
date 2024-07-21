@@ -8,6 +8,11 @@ const io = require('socket.io')(http, {
     origin: '*',
   },
 });
+const { MongoClient } = require('mongodb');
+
+// Connexion à la base de données
+const dbUri = 'mongodb://localhost:27017/'; // URL de connexion à MongoDB
+const dbName = 'phaserGame'; // Nom de ta base de données
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -19,15 +24,10 @@ const players = new Map();
 io.on('connection', (socket) => {
     numberOfPlayers++;
     console.log(`Un joueur s'est connecté, nombre de joueurs: ${numberOfPlayers}`);
-    // Quand un nouveau joueur se connecte
     socket.on('newPlayer', (playerData) => {
-      // Stockez les données du joueur (vous pouvez utiliser une Map ou un objet)
       players.set(socket.id, playerData);
-      
-      // Envoyez les données de ce nouveau joueur à tous les autres
       socket.broadcast.emit('playerJoined', { id: socket.id, ...playerData });
       
-      // Envoyez les données de tous les joueurs existants au nouveau joueur
       Object.keys(players).forEach(playerId => {
         if (playerId !== socket.id) {
           socket.emit('playerJoined', { id: playerId, ...players[playerId] });
@@ -35,15 +35,14 @@ io.on('connection', (socket) => {
       });
     });
   
-    // Quand un joueur se déconnecte
     socket.on('disconnect', () => {
         numberOfPlayers--;
         console.log(`Un joueur s'est déconnecté, nombre de joueurs: ${numberOfPlayers}`);
         players.delete(socket.id);
         io.emit('playerLeft', socket.id);
+        socket.broadcast.emit('playerLeft', socket.id);
     });
   
-    // Quand un joueur met à jour sa position ou d'autres données
     socket.on('updatePlayer', (playerData) => {
       players[socket.id] = { ...players[socket.id], ...playerData };
       socket.broadcast.emit('playerUpdated', { id: socket.id, ...playerData });
@@ -60,11 +59,6 @@ app.post('/savePlayerPosition', (req, res) => {
     const { x, y } = req.body;
     savedPosition = { x, y };
     res.send(`Position du joueur sauvegardée avec succès: x=${x}, y=${y}`);
-});
-
-// Endpoint API pour charger la dernière position du joueur
-app.get('/getPlayerPosition', (req, res) => {
-    res.json(savedPosition);
 });
 
 const PORT = 3000;
