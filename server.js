@@ -61,6 +61,8 @@ io.on('connection', (socket) => {
       }
     });
 
+    socket.emit('currentPlayers', Array.from(players.entries()).map(([id, data]) => ({ id, ...data })));
+
     socket.on('chat message', async (msg, playerName) => {
       console.log('Message reçu :', msg + ' de ' + playerName);
       try {

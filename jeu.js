@@ -105,23 +105,40 @@ class MainScene extends Phaser.Scene {
         this.players = {};
         this.cursorText = null;
         this.playerNameText = null;
-        this.chat = false;
+        this.platforms = null;
     }
 
     preload() {
         this.load.image('background', 'background.png');
         this.load.image('ground', 'https://examples.phaser.io/assets/sprites/platform.png');
+        this.load.image('send-icon', 'path/to/your/send-icon.png');
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
     }
 
     create() {
         this.add.image(640, 360, 'background');
 
-        const platforms = this.physics.add.staticGroup();
-        platforms.create(640, 720, 'ground').setScale(2).refreshBody();
+        this.platforms = this.physics.add.staticGroup();
+        this.platforms.create(640, 720, 'ground').setScale(2).refreshBody();
 
-        //logique de vérification si x et y existent pour le joueur afin de charger son précedent emplacement sinon on charge les coordonnées par défaut
-        fetch('http://localhost:3000/getPlayerPosition/'+this.characterId, {
+        this.loadPlayerPosition()
+            .then(() => {
+                this.initializeGameElements();
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement de la position du joueur:', error);
+                this.initializePlayerWithDefaultPosition();
+            });
+
+        this.setupChat();
+        this.setupInputEvents();
+        this.setupSocketEvents();
+
+        this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
+    }
+
+    loadPlayerPosition() {
+        return fetch(`http://localhost:3000/getPlayerPosition/${this.characterId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -129,74 +146,143 @@ class MainScene extends Phaser.Scene {
         })
         .then(response => {
             if (!response.ok) {
-                //initialisation du joueur, limites de collision et ajout du joueur dans le groupe de collision
-                this.player = this.physics.add.sprite(688, 231, 'dude');
-                this.player.setCollideWorldBounds(false);
-                this.physics.add.collider(this.player, platforms);
-                //name container
-                this.playerNameContainer = this.add.container(this.player.x, this.player.y - 40);
-                const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
-                textBg.setAlpha(0.7);
-                this.playerNameText = this.add.text(0, 0, this.playerName, { 
-                    font: '16px Arial', 
-                    fill: '#ffffff',
-                    padding: { x: 5, y: 2 }
-                });
-                this.playerNameText.setOrigin(0.5);
-
-                textBg.width = this.playerNameText.width + 10; 
-                textBg.setOrigin(0.5);
-
-                this.playerNameContainer.add(textBg);
-                this.playerNameContainer.add(this.playerNameText);
-                this.chat = true;
-                throw new Error('Erreur lors de la récupération de la position du joueur');
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            //initialisation du joueur, limites de collision et ajout du joueur dans le groupe de collision
-            this.player = this.physics.add.sprite(data.x || 688, data.y || 231, 'dude');
-            this.player.setCollideWorldBounds(false);
-            this.physics.add.collider(this.player, platforms);
-            //name container
-            this.playerNameContainer = this.add.container(this.player.x, this.player.y - 40);
-            const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
-            textBg.setAlpha(0.7);
-            this.playerNameText = this.add.text(0, 0, this.playerName, { 
-                font: '16px Arial', 
-                fill: '#ffffff',
-                padding: { x: 5, y: 2 }
-            });
-            this.playerNameText.setOrigin(0.5);
+            if (data && data.x !== undefined && data.y !== undefined) {
+                this.initializePlayer(data.x, data.y);
+            } else {
+                this.initializePlayerWithDefaultPosition();
+            }
+        });
+    }
 
-            textBg.width = this.playerNameText.width + 10; 
-            textBg.setOrigin(0.5);
+    initializePlayer(x, y) {
+        this.player = this.physics.add.sprite(x, y, 'dude');
+        this.player.setCollideWorldBounds(false);
+        this.physics.add.collider(this.player, this.platforms);
+        this.createPlayerNameContainer();
+    }
 
-            this.playerNameContainer.add(textBg);
-            this.playerNameContainer.add(this.playerNameText);
-            this.chat = true;
+    initializePlayerWithDefaultPosition() {
+        this.initializePlayer(688, 231);
+    }
+
+    createPlayerNameContainer() {
+        this.playerNameContainer = this.add.container(this.player.x, this.player.y - 40);
+        const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
+        textBg.setAlpha(0.7);
+        this.playerNameText = this.add.text(0, 0, this.playerName, { 
+            font: '16px Arial', 
+            fill: '#ffffff',
+            padding: { x: 5, y: 2 }
+        });
+        this.playerNameText.setOrigin(0.5);
+
+        textBg.width = this.playerNameText.width + 10; 
+        textBg.setOrigin(0.5);
+
+        this.playerNameContainer.add(textBg);
+        this.playerNameContainer.add(this.playerNameText);
+    }
+
+    initializeGameElements() {
+        this.joinGame();
+    }
+
+
+    setupChat() {
+        const chatBox = this.add.rectangle(10, 710, 300, 200, 0x333333);
+        chatBox.setAlpha(0.7);
+        chatBox.setOrigin(0, 1);
+
+        const chatInput = this.add.text(15, 685, '', {
+            font: '14px Arial',
+            fill: '#ffffff',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            padding: { x: 5, y: 5 },
+            fixedWidth: 270
+        }).setOrigin(0, 0);
+
+        let currentInput = '';
+        let isChatActive = false;
+
+        const toggleChat = () => {
+            isChatActive = !isChatActive;
+            chatInput.setBackgroundColor(isChatActive ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)');
+        };
+
+        this.input.keyboard.on('keydown', (event) => {
+            if (event.keyCode === 13) { // Touche Entrée
+                if (!isChatActive) {
+                    toggleChat(); // Activer le chat
+                } else {
+                    if (currentInput) {
+                        this.sendChatMessage(currentInput, this.playerName);
+                        currentInput = '';
+                        chatInput.setText('');
+                    }
+                    toggleChat(); // Désactiver le chat après l'envoi
+                }
+            } else if (isChatActive) {
+                if (event.keyCode === 8 && currentInput.length > 0) {
+                    // Backspace - supprimer le dernier caractère
+                    currentInput = currentInput.slice(0, -1);
+                } else if (event.key.length === 1) {
+                    // Ajouter le caractère tapé
+                    currentInput += event.key;
+                }
+                
+                // Mettre à jour le texte affiché
+                chatInput.setText(currentInput);
+            }
         });
 
+        const sendIcon = this.add.image(285, 700, 'send-icon')
+            .setScale(0.5)
+            .setInteractive()
+            .on('pointerdown', () => {
+                if (currentInput) {
+                    this.sendChatMessage(currentInput, this.playerName);
+                    currentInput = '';
+                    chatInput.setText('');
+                    toggleChat(); // Désactiver le chat après l'envoi
+                }
+            });
+
+        const chatMessages = this.add.text(15, 520, '', {
+            font: '14px Arial',
+            fill: '#ffffff',
+            wordWrap: { width: 280 },
+            padding: { x: 5, y: 5 }
+        });
+
+        this.addChatMessage = (message, playerName) => {
+            chatMessages.text += `${playerName}: ${message}\n`;
+            // Faire défiler vers le bas si nécessaire
+        };
+
+        socket.on('chat message', (msg, playerName) => {
+            console.log('Message reçu:', msg + ' de ' + playerName);
+            this.addChatMessage(msg, playerName);
+        });
+    }
+
+    sendChatMessage(message, playerName) {
+        socket.emit('chat message', message, playerName);
+    }
+
+    setupInputEvents() {
         this.input.on('pointerdown', (pointer) => {
             this.targetX = pointer.x;
             this.targetY = pointer.y;
             this.moving = true;
         });
+    }
 
-        socket.on('chat message', (msg, playerName) => {
-            console.log('Message reçu:', msg + ' de ' + playerName);
-            // Affichez le message dans votre interface de jeu
-        })
-
-        this.sendChatMessage = (message, playerName) => {
-            socket.emit('chat message', message, playerName);
-        };
-
-        this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
-
-        socket.emit('register', { name: this.playerName });
-
+    setupSocketEvents() {
         socket.on('registrationSuccess', (data) => {
             console.log(`Enregistrement réussi pour ${data.name} avec l'ID de personnage ${data.characterId}`);
             this.joinGame();
@@ -206,7 +292,17 @@ class MainScene extends Phaser.Scene {
             console.error('Erreur lors de l\'enregistrement:', error.message);
         });
 
+        socket.on('currentPlayers', (players) => {
+            console.log('Received current players:', players);
+            Object.values(players).forEach((playerData) => {
+                if (playerData.id !== socket.id) {
+                    this.addNewPlayerToGame(playerData);
+                }
+            });
+        });
+
         socket.on('playerJoined', (playerData) => {
+            console.log('New player joined:', playerData);
             this.addNewPlayerToGame(playerData);
         });
 
@@ -215,13 +311,8 @@ class MainScene extends Phaser.Scene {
         });
 
         socket.on('playerUpdated', (playerData) => {
+            console.log('Player updated:', playerData);
             this.updatePlayerInGame(playerData);
-        });
-
-        const chatButton = this.add.text(100, 100, 'Envoyer un message', { fill: '#0f0' })
-        .setInteractive()
-        .on('pointerdown', () => {
-            this.sendChatMessage('Hello from the game!', this.playerName);
         });
     }
 
@@ -232,13 +323,70 @@ class MainScene extends Phaser.Scene {
             y: this.player.y,
             name: this.playerName
         });
+        socket.emit('getCurrentPlayers');
+    }
+
+    addNewPlayerToGame(playerData) {
+        console.log('Adding new player:', playerData);
+        if (this.players[playerData.id]) {
+            console.log('Player already exists, updating instead');
+            this.updatePlayerInGame(playerData);
+            return;
+        }
+        const newPlayer = this.physics.add.sprite(playerData.x, playerData.y, 'dude');
+        newPlayer.playerId = playerData.id;
+        
+        const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name);
+        
+        this.players[playerData.id] = { sprite: newPlayer, nameContainer: nameContainer };
+    }
+
+    createNameContainer(x, y, name) {
+        const container = this.add.container(x, y - 40);
+        const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
+        textBg.setAlpha(0.7);
+        const nameText = this.add.text(0, 0, name, { 
+            font: '16px Arial', 
+            fill: '#ffffff',
+            padding: { x: 5, y: 2 }
+        });
+        nameText.setOrigin(0.5);
+        textBg.width = nameText.width + 10; 
+        textBg.setOrigin(0.5);
+        container.add(textBg);
+        container.add(nameText);
+        return container;
+    }
+
+    updatePlayerInGame(playerData) {
+        console.log('Updating player:', playerData);
+        if (this.players[playerData.id]) {
+            const player = this.players[playerData.id];
+            player.sprite.setPosition(playerData.x, playerData.y);
+            player.nameContainer.setPosition(playerData.x, playerData.y - 40);
+        } else {
+            console.log('Player not found, adding new player');
+            this.addNewPlayerToGame(playerData);
+        }
+    }
+
+    removePlayerFromGame(playerId) {
+        console.log('Removing player:', playerId);
+        if (this.players[playerId]) {
+            this.players[playerId].sprite.destroy();
+            this.players[playerId].nameContainer.destroy();
+            delete this.players[playerId];
+            socket.emit('playerLeft', playerId);
+        }
     }
 
     update() {
-        const pointer = this.input.activePointer;
-        this.cursorText.setText(`X: ${pointer.worldX} Y: ${pointer.worldY}`);
+        if (this.cursorText) {
+            const pointer = this.input.activePointer;
+            this.cursorText.setText(`X: ${pointer.worldX} Y: ${pointer.worldY}`);
+        }
 
-        if (this.moving) {
+        if (this.moving && this.player) {
             const distanceX = this.targetX - this.player.x;
             const distanceY = this.targetY - this.player.y;
 
@@ -254,7 +402,7 @@ class MainScene extends Phaser.Scene {
                 this.player.y = this.targetY;
                 this.moving = false;
                 
-                this.savePlayerPosition(socket.id);
+                this.savePlayerPosition();
             }
             
             if (this.playerNameContainer) {
@@ -267,9 +415,15 @@ class MainScene extends Phaser.Scene {
                 y: this.player.y
             });
         }
+
+        if (this.player && (this.player.oldX !== this.player.x || this.player.oldY !== this.player.y)) {
+            socket.emit('playerMovement', { x: this.player.x, y: this.player.y });
+            this.player.oldX = this.player.x;
+            this.player.oldY = this.player.y;
+        }
     }
 
-    savePlayerPosition(characterId) {
+    savePlayerPosition() {
         fetch('http://localhost:3000/savePlayerPosition', {
             method: 'POST',
             headers: {
@@ -289,28 +443,6 @@ class MainScene extends Phaser.Scene {
         .catch(error => {
             console.error('Erreur:', error);
         });
-    }
-
-    addNewPlayerToGame(playerData) {
-        const newPlayer = this.physics.add.sprite(playerData.x, playerData.y, 'dude');
-        newPlayer.setTint(playerData.color);
-        const floatingName = this.add.text(x, y - 20, playerData.name, { font: '16px Arial', fill: '#000000' });
-
-        newPlayer.playerId = playerData.id;
-        this.players[playerData.id] = newPlayer;
-    }
-
-    removePlayerFromGame(playerId) {
-        if (this.players[playerId]) {
-            this.players[playerId].destroy();
-            delete this.players[playerId];
-        }
-    }
-
-    updatePlayerInGame(playerData) {
-        if (this.players[playerData.id]) {
-            this.players[playerData.id].setPosition(playerData.x, playerData.y);
-        }
     }
 }
 
