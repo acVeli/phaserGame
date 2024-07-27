@@ -8,8 +8,7 @@ const io = require('socket.io')(http, {
     origin: '*',
   },
 });
-const { MongoClient, ObjectId } = require('mongodb');
-const { get } = require('http');
+const { MongoClient } = require('mongodb');
 
 let mongoClient, db;
 
@@ -33,6 +32,7 @@ async function connectToMongo() {
     throw err;
   }
 }
+
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -60,7 +60,21 @@ io.on('connection', (socket) => {
         console.error('Erreur lors de la création du personnage :', err);
       }
     });
-  
+
+    socket.on('chat message', async (msg, playerName) => {
+      console.log('Message reçu :', msg + ' de ' + playerName);
+      try {
+          await db.collection('messages').insertOne({
+              message: msg,
+              playerName: playerName,
+              timestamp: new Date()
+          });
+          io.emit('chat message', msg, playerName); // Envoie le message à tous les clients connectés
+      } catch (err) {
+          console.error('Erreur lors de l\'enregistrement du message:', err);
+      }
+    });
+
     socket.on('disconnect', () => {
         numberOfPlayers--;
         console.log(`Un joueur s'est déconnecté, nombre de joueurs: ${numberOfPlayers}`);
@@ -100,6 +114,16 @@ app.post('/createCharacter', async (req, res) => {
     res.status(201).json({ message: 'Personnage créé avec succès', characterId , name });
   } catch (err) {
     res.status(500).send('Erreur lors de la création du personnage');
+  }
+});
+
+app.get('/chatHistory', async (req, res) => {
+  try {
+      const history = await db.collection('messages').find().sort({ timestamp: -1 }).limit(50).toArray();
+      res.json(history);
+  } catch (err) {
+      console.error('Erreur lors de la récupération de l\'historique du chat:', err);
+      res.status(500).send('Erreur lors de la récupération de l\'historique du chat');
   }
 });
 

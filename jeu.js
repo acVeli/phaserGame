@@ -1,3 +1,5 @@
+// LOGINSCENE
+
 class LoginScene extends Phaser.Scene {
     constructor() {
         super({ key: 'LoginScene' });
@@ -85,6 +87,8 @@ class LoginScene extends Phaser.Scene {
 }
 
 
+//MAINSCENE
+
 class MainScene extends Phaser.Scene {
     constructor() {
         super({ key: 'MainScene' });
@@ -100,12 +104,13 @@ class MainScene extends Phaser.Scene {
         this.speed = 160;
         this.players = {};
         this.cursorText = null;
+        this.playerNameText = null;
+        this.chat = false;
     }
 
     preload() {
         this.load.image('background', 'background.png');
         this.load.image('ground', 'https://examples.phaser.io/assets/sprites/platform.png');
-        this.load.image('star', 'https://examples.phaser.io/assets/sprites/star.png');
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
     }
 
@@ -124,15 +129,53 @@ class MainScene extends Phaser.Scene {
         })
         .then(response => {
             if (!response.ok) {
+                //initialisation du joueur, limites de collision et ajout du joueur dans le groupe de collision
                 this.player = this.physics.add.sprite(688, 231, 'dude');
+                this.player.setCollideWorldBounds(false);
+                this.physics.add.collider(this.player, platforms);
+                //name container
+                this.playerNameContainer = this.add.container(this.player.x, this.player.y - 40);
+                const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
+                textBg.setAlpha(0.7);
+                this.playerNameText = this.add.text(0, 0, this.playerName, { 
+                    font: '16px Arial', 
+                    fill: '#ffffff',
+                    padding: { x: 5, y: 2 }
+                });
+                this.playerNameText.setOrigin(0.5);
+
+                textBg.width = this.playerNameText.width + 10; 
+                textBg.setOrigin(0.5);
+
+                this.playerNameContainer.add(textBg);
+                this.playerNameContainer.add(this.playerNameText);
+                this.chat = true;
                 throw new Error('Erreur lors de la récupération de la position du joueur');
             }
             return response.json();
         })
         .then(data => {
+            //initialisation du joueur, limites de collision et ajout du joueur dans le groupe de collision
             this.player = this.physics.add.sprite(data.x || 688, data.y || 231, 'dude');
             this.player.setCollideWorldBounds(false);
             this.physics.add.collider(this.player, platforms);
+            //name container
+            this.playerNameContainer = this.add.container(this.player.x, this.player.y - 40);
+            const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
+            textBg.setAlpha(0.7);
+            this.playerNameText = this.add.text(0, 0, this.playerName, { 
+                font: '16px Arial', 
+                fill: '#ffffff',
+                padding: { x: 5, y: 2 }
+            });
+            this.playerNameText.setOrigin(0.5);
+
+            textBg.width = this.playerNameText.width + 10; 
+            textBg.setOrigin(0.5);
+
+            this.playerNameContainer.add(textBg);
+            this.playerNameContainer.add(this.playerNameText);
+            this.chat = true;
         });
 
         this.input.on('pointerdown', (pointer) => {
@@ -140,6 +183,15 @@ class MainScene extends Phaser.Scene {
             this.targetY = pointer.y;
             this.moving = true;
         });
+
+        socket.on('chat message', (msg, playerName) => {
+            console.log('Message reçu:', msg + ' de ' + playerName);
+            // Affichez le message dans votre interface de jeu
+        })
+
+        this.sendChatMessage = (message, playerName) => {
+            socket.emit('chat message', message, playerName);
+        };
 
         this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
 
@@ -165,6 +217,12 @@ class MainScene extends Phaser.Scene {
         socket.on('playerUpdated', (playerData) => {
             this.updatePlayerInGame(playerData);
         });
+
+        const chatButton = this.add.text(100, 100, 'Envoyer un message', { fill: '#0f0' })
+        .setInteractive()
+        .on('pointerdown', () => {
+            this.sendChatMessage('Hello from the game!', this.playerName);
+        });
     }
 
     joinGame() {
@@ -189,16 +247,20 @@ class MainScene extends Phaser.Scene {
             const velocityY = Math.sin(angle) * this.speed;
 
             this.player.setVelocity(velocityX, velocityY);
-
+            
             if (Math.abs(distanceX) < 4 && Math.abs(distanceY) < 4) {
                 this.player.setVelocity(0, 0);
                 this.player.x = this.targetX;
                 this.player.y = this.targetY;
                 this.moving = false;
-
+                
                 this.savePlayerPosition(socket.id);
             }
-
+            
+            if (this.playerNameContainer) {
+                this.playerNameContainer.setPosition(this.player.x, this.player.y - 40);
+            }
+            
             socket.emit('updatePlayer', {
                 id: socket.id,
                 x: this.player.x,
@@ -232,6 +294,8 @@ class MainScene extends Phaser.Scene {
     addNewPlayerToGame(playerData) {
         const newPlayer = this.physics.add.sprite(playerData.x, playerData.y, 'dude');
         newPlayer.setTint(playerData.color);
+        const floatingName = this.add.text(x, y - 20, playerData.name, { font: '16px Arial', fill: '#000000' });
+
         newPlayer.playerId = playerData.id;
         this.players[playerData.id] = newPlayer;
     }
@@ -250,6 +314,10 @@ class MainScene extends Phaser.Scene {
     }
 }
 
+
+
+
+//CONFIGURATION DU JEU
 
 const port = 3000;
 
