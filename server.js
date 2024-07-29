@@ -43,28 +43,25 @@ const players = new Map();
 
 io.on('connection', (socket) => {
     numberOfPlayers++;
-    console.log(`Un joueur s'est connecté, nombre de joueurs: ${numberOfPlayers}`);
-    socket.on('newPlayer', async (playerData) => {
-      try {
-        const characterId = await addCharacter({ name: playerData.name });
-        playerData.characterId = characterId;
-        players.set(socket.id, playerData);
-        socket.broadcast.emit('playerJoined', { id: socket.id, ...playerData });
-        
-        players.forEach((data, playerId) => {
-          if (playerId !== socket.id) {
-            socket.emit('playerJoined', { id: playerId, ...data });
-          }
-        });
-      } catch (err) {
-        console.error('Erreur lors de la création du personnage :', err);
-      }
+
+    //ajouter un joueur à la liste des joueurs players
+
+    socket.on('addPlayerToPlayerList', (playerData) => {
+      players.set(socket.id, playerData);
+      console.log('Joueur ajouté à la liste des joueurs :', playerData);
     });
 
-    socket.emit('currentPlayers', Array.from(players.entries()).map(([id, data]) => ({ id, ...data })));
+    if(numberOfPlayers > 1) {
+      //envoyer les données de tous les joueurs au nouveau joueur
+      for (const [id, playerData] of players) {
+        socket.emit('playerMoved', { id, ...playerData });
+      }
+    }
+
+    console.log(`Un joueur s'est connecté, nombre de joueurs: ${numberOfPlayers}`);
 
     socket.on('chat message', async (msg, playerName) => {
-      console.log('Message reçu :', msg + ' de ' + playerName);
+      console.log('Chat de', playerName, ':', msg);
       try {
           await db.collection('messages').insertOne({
               message: msg,
@@ -77,6 +74,22 @@ io.on('connection', (socket) => {
       }
     });
 
+    socket.on('joinGame', async (characterId) => {
+      try {
+        const character = await db.collection('players').findOne({ _id: characterId });
+        // récupère la position du joueur
+        const playerPosition = await db.collection('playerPositions').findOne({ playerId: characterId });
+        if (!character) {
+          return socket.emit('errorMessage', 'Personnage non trouvé');
+        }
+        socket.broadcast.emit('playerJoined', { id: socket.id, characterId, name: character.name, ...playerPosition });
+        console.log('Joueur', character.name, 'a rejoint le jeu');
+      } catch (err) {
+        console.error('Erreur lors de la récupération du personnage :', err);
+        socket.emit('errorMessage', 'Erreur lors de la récupération du personnage');
+      }
+    });
+
     socket.on('disconnect', () => {
         numberOfPlayers--;
         console.log(`Un joueur s'est déconnecté, nombre de joueurs: ${numberOfPlayers}`);
@@ -85,11 +98,59 @@ io.on('connection', (socket) => {
     });
   
     socket.on('updatePlayer', (playerData) => {
-      const existingPlayer = players.get(socket.id) || {};
-      players.set(socket.id, { ...existingPlayer, ...playerData });
-      socket.broadcast.emit('playerUpdated', { id: socket.id, ...playerData });
+        //remplacer les données du joueur dans la liste des joueurs
+        players.set(socket.id, playerData);
+        //envoyer les nouvelles données du joueur à tous les clients
+        socket.broadcast.emit('playerMoved', { id: socket.id, ...playerData });
     });
+
+    socket.on('createCharacter', async (characterData) => {
+      try {
+        const character = await addCharacter(characterData);
+        socket.emit('registrationSuccess', character);
+        console.log('Nouveau personnage créé avec succès :', characterData.name);
+      } catch (err) {
+        console.error('Erreur lors de la création du personnage :', err);
+        socket.emit('errorMessage', 'Erreur lors de la création du personnage');
+      }
+  });
+
+  socket.on('getPlayerPosition', async (characterId) => {
+    try {
+      const playerPosition = await db.collection('playerPositions').findOne({ playerId: characterId });
+      socket.emit('playerPosition', playerPosition);
+    } catch (err) {
+      console.error('Erreur lors de la récupération de la position du joueur :', err);
+      socket.emit('errorMessage', 'Erreur lors de la récupération de la position du joueur');
+    }
+  });
+
+  socket.on('getCharacter', async (name) => {
+    try {
+      const character = await getCharacter(name);
+      socket.emit('character', character);
+    } catch (err) {
+      console.error('Erreur lors de la récupération du personnage :', err);
+      socket.emit('errorMessage', 'Erreur lors de la récupération du personnage');
+    }
+  });
+
+  socket.on('checkName', async (name) => {
+    try {
+      const character = await getCharacter(name);
+      socket.emit('nameChecked', !!character);
+    } catch (err) {
+      console.error('Erreur lors de la vérification du nom :', err);
+      socket.emit('errorMessage', 'Erreur lors de la vérification du nom');
+    }
+  });
+
 });
+
+//console.log de players tous les 5 secondes
+setInterval(() => {
+  console.log(players);
+}, 5000);
 
 async function addCharacter(characterData) {
   try {
@@ -99,25 +160,14 @@ async function addCharacter(characterData) {
       createdAt: new Date()
     });
     console.log(`Nouveau personnage ajouté avec l'ID : ${result.insertedId} et le nom : ${characterData.name}`);
-    return result.insertedId;
+    return result;
   } catch (err) {
     console.error('Erreur lors de l\'ajout du personnage :', err);
     throw err;
   }
 }
 
-app.post('/createCharacter', async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) {
-      return res.status(400).send('Le nom du personnage est requis');
-    }
-    const characterId = await addCharacter({ name });
-    res.status(201).json({ message: 'Personnage créé avec succès', characterId , name });
-  } catch (err) {
-    res.status(500).send('Erreur lors de la création du personnage');
-  }
-});
+
 
 app.get('/chatHistory', async (req, res) => {
   try {
@@ -145,35 +195,6 @@ app.post('/savePlayerPosition', async (req, res) => {
     }
 });
 
-app.get('/getPlayerPosition/:id', async (req, res) => {
-    const characterId = req.params.id;
-    try {
-        const playerPosition = await db.collection('playerPositions').findOne({ playerId: characterId });
-        if (!playerPosition) {
-            return res.status(404).send('Position du joueur non trouvée');
-        }
-        res.json(playerPosition);
-    } catch (err) {
-        console.error('Erreur lors de la récupération de la position du joueur:', err);
-        res.status(500).send('Erreur lors de la récupération de la position du joueur');
-    }
-});
-
-app.get('/getCharacter/:name', async (req, res) => {
-    const name = req.params.name;
-    try {
-        const character = await getCharacter(name);
-        if (!character) {
-            return res.status(404).send('Personnage non trouvé');
-        }
-        console.log('Personnage récupéré :', character);
-        res.json(character);
-    } catch (err) {
-        console.error('Erreur lors de la récupération du personnage :', err);
-        res.status(500).send('Erreur lors de la récupération du personnage');
-    }
-});
-
 async function getCharacter(name) {
   try {
     const character = await db.collection('players').findOne({ name });
@@ -183,16 +204,6 @@ async function getCharacter(name) {
     throw err;
   }
 }
-
-app.get('/checkName/:name', async (req, res) => {
-  try {
-    const name = req.params.name;
-    const character = await db.collection('players').findOne({ name });
-    res.json({ exists: !!character });
-  } catch (err) {
-    res.status(500).send('Erreur lors de la vérification du nom');
-  }
-});
 
 // Fonction pour démarrer le serveur
 async function startServer() {

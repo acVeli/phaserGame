@@ -6,7 +6,7 @@ class LoginScene extends Phaser.Scene {
     }
 
     create() {
-        this.add.text(640, 200, 'Bienvenue', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(640, 200, 'Bienvenue sur Terzawa', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
 
         const nameInput = this.add.dom(640, 300, 'input', {
             type: 'text',
@@ -19,69 +19,36 @@ class LoginScene extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => {
                 const name = nameInput.node.value;
-                if (name) {
-                    // check si le nom est déjà utilisé
-                    fetch('http://localhost:3000/checkName/'+name, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                    }).then(response => {
-                        if (!response.ok) {
-                            throw new Error('Erreur lors de la vérification du nom');
-                        }
-                        return response.json();
-                    }).then(data => {
-                        if (data.exists) {
-                            this.loginCharacter(name);
-                        }
-                        else {
-                            this.createCharacter(name);
-                        }
-                    }).catch(error => {
-                        console.error('Erreur:', error);
-                        this.add.text(640, 450, 'Erreur: Impossible de vérifier le nom', { fontSize: '16px', fill: '#f00' }).setOrigin(0.5);
-                    });
-
-                } else {
-                    this.add.text(640, 450, 'Veuillez entrer un nom', { fontSize: '16px', fill: '#f00' }).setOrigin(0.5);
+                if(socket.emit('checkName', name)) {
+                    this.loginCharacter(name);
+                } else {  
+                    this.createCharacter(name);
                 }
             });
     }
 
     loginCharacter(name) {
-        fetch('http://localhost:3000/getCharacter/'+name, { method: 'GET' })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Erreur lors de la récupération du personnage');
+        socket.emit('getCharacter', name);
+        socket.on('character', (character) => {
+            if (character) {
+                this.scene.start('MainScene', { playerName: name, characterId: character._id, loggedIn: true });
+                console.log('Personnage trouvé', character);
+            } else {
+                this.createCharacter(name);
             }
-            return response.json();
-        }).then(data => {
-            console.log('Personnage récupéré:', data);
-            this.scene.start('MainScene', { playerName: name, characterId: data._id });
-        }).catch(error => {
-            console.error('Erreur:', error);
-            this.add.text(640, 450, 'Erreur: Impossible de récupérer le personnage', { fontSize: '16px', fill: '#f00' }).setOrigin(0.5);
         });
     }
 
     createCharacter(name) {
-        fetch('http://localhost:3000/createCharacter', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ name }),
-        }).then(response => {
-            if (!response.ok) {
-                throw new Error('Erreur lors de la création du personnage');
+        socket.emit('createCharacter', { name: name });
+        socket.on('registrationSuccess', (character) => {
+            if (!character) {
+                console.error('Erreur lors de la création du personnage');
+                this.add.text(640, 500, 'Erreur lors de la création du personnage', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+                return;
             }
-            return response.json();
-        }).then(data => {
-            this.scene.start('MainScene', { playerName: name, characterId: data.characterId });
-        }).catch(error => {
-            console.error('Erreur:', error);
-            this.add.text(640, 450, 'Erreur: Impossible de créer le personnage', { fontSize: '16px', fill: '#f00' }).setOrigin(0.5);
+            console.log('Personnage créé:', character);
+            this.scene.start('MainScene', { playerName: name, characterId: character._id, registered: true });
         });
     }
 }
@@ -92,6 +59,7 @@ class LoginScene extends Phaser.Scene {
 class MainScene extends Phaser.Scene {
     constructor() {
         super({ key: 'MainScene' });
+        this.lastForcedUpdate = 0;
     }
 
     init(data) {
@@ -106,12 +74,15 @@ class MainScene extends Phaser.Scene {
         this.cursorText = null;
         this.playerNameText = null;
         this.platforms = null;
+        this.registered = data.registered || false;
+        this.loggedIn = data.loggedIn || false;
+        console.log('MainScene initialized with', data);
     }
 
     preload() {
         this.load.image('background', 'background.png');
-        this.load.image('ground', 'https://examples.phaser.io/assets/sprites/platform.png');
-        this.load.image('send-icon', 'path/to/your/send-icon.png');
+        this.load.image('ground', 'platform.png');
+        this.load.image('send-icon', 'send_message.svg', { frameWidth: 50, frameHeight: 50  });
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
     }
 
@@ -121,49 +92,39 @@ class MainScene extends Phaser.Scene {
         this.platforms = this.physics.add.staticGroup();
         this.platforms.create(640, 720, 'ground').setScale(2).refreshBody();
 
-        this.loadPlayerPosition()
-            .then(() => {
-                this.initializeGameElements();
-            })
-            .catch(error => {
-                console.error('Erreur lors du chargement de la position du joueur:', error);
-                this.initializePlayerWithDefaultPosition();
+        if(socket.emit('getPlayerPosition', this.characterId)) {
+            socket.on('playerPosition', (playerPosition) => {
+                if (playerPosition) {
+                    this.initializePlayer(playerPosition.x, playerPosition.y);
+                } else {
+                    this.initializePlayerWithDefaultPosition();
+                }
             });
+        } else {
+            this.initializePlayerWithDefaultPosition();
+        }
 
         this.setupChat();
-        this.setupInputEvents();
+        this.setupInputEvents(); 
         this.setupSocketEvents();
+        this.initializeGameElements();
 
         this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
     }
 
-    loadPlayerPosition() {
-        return fetch(`http://localhost:3000/getPlayerPosition/${this.characterId}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data && data.x !== undefined && data.y !== undefined) {
-                this.initializePlayer(data.x, data.y);
-            } else {
-                this.initializePlayerWithDefaultPosition();
-            }
-        });
-    }
-
     initializePlayer(x, y) {
         this.player = this.physics.add.sprite(x, y, 'dude');
+        this.player.x = x;
+        this.player.y = y;
         this.player.setCollideWorldBounds(false);
         this.physics.add.collider(this.player, this.platforms);
         this.createPlayerNameContainer();
+        socket.emit('addPlayerToPlayerList', {
+            id: socket.id,
+            x: this.player.x,
+            y: this.player.y,
+            name: this.playerName
+        });
     }
 
     initializePlayerWithDefaultPosition() {
@@ -202,7 +163,7 @@ class MainScene extends Phaser.Scene {
             font: '14px Arial',
             fill: '#ffffff',
             backgroundColor: 'rgba(0,0,0,0.5)',
-            padding: { x: 5, y: 5 },
+            padding: { x: 3, y: 3 },
             fixedWidth: 270
         }).setOrigin(0, 0);
 
@@ -240,7 +201,7 @@ class MainScene extends Phaser.Scene {
             }
         });
 
-        const sendIcon = this.add.image(285, 700, 'send-icon')
+        const sendIcon = this.add.image(295, 700, 'send-icon')
             .setScale(0.5)
             .setInteractive()
             .on('pointerdown', () => {
@@ -284,46 +245,34 @@ class MainScene extends Phaser.Scene {
 
     setupSocketEvents() {
         socket.on('registrationSuccess', (data) => {
-            console.log(`Enregistrement réussi pour ${data.name} avec l'ID de personnage ${data.characterId}`);
+            console.log(`Enregistrement réussi pour ${data.name} avec l'ID de personnage ${data._id}`);
             this.joinGame();
         });
 
-        socket.on('registrationError', (error) => {
-            console.error('Erreur lors de l\'enregistrement:', error.message);
-        });
-
-        socket.on('currentPlayers', (players) => {
-            console.log('Received current players:', players);
-            Object.values(players).forEach((playerData) => {
-                if (playerData.id !== socket.id) {
-                    this.addNewPlayerToGame(playerData);
-                }
-            });
-        });
-
-        socket.on('playerJoined', (playerData) => {
-            console.log('New player joined:', playerData);
-            this.addNewPlayerToGame(playerData);
+        socket.on('errorMessage', (error) => {
+            console.error('Erreur', error.message);
         });
 
         socket.on('playerLeft', (playerId) => {
             this.removePlayerFromGame(playerId);
         });
 
-        socket.on('playerUpdated', (playerData) => {
-            console.log('Player updated:', playerData);
+        socket.on('playerMoved', (playerData) => {
+            console.log('Player moved:', playerData);
             this.updatePlayerInGame(playerData);
         });
     }
-
+    
     joinGame() {
-        socket.emit('joinGame');
-        socket.emit('newPlayer', {
-            x: this.player.x,
-            y: this.player.y,
-            name: this.playerName
-        });
-        socket.emit('getCurrentPlayers');
+        console.log('Rejoindre le jeu');
+        if(this.registered) {
+            console.log('Enregistrement réussi, rejoindre le jeu');
+        } else if(this.loggedIn) {
+            console.log('Connexion réussie, rejoindre le jeu');
+        }
+        console.log(this.playerName + ' a rejoint le jeu');
+        console.log(this);
+        socket.emit('joinGame', this.characterId, this.playerName, this.player.x | '400', this.player.y | '400');
     }
 
     addNewPlayerToGame(playerData) {
@@ -339,6 +288,8 @@ class MainScene extends Phaser.Scene {
         const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name);
         
         this.players[playerData.id] = { sprite: newPlayer, nameContainer: nameContainer };
+    
+        console.log(`Name container created for ${playerData.name} at (${playerData.x}, ${playerData.y - 40})`);
     }
 
     createNameContainer(x, y, name) {
@@ -355,6 +306,7 @@ class MainScene extends Phaser.Scene {
         textBg.setOrigin(0.5);
         container.add(textBg);
         container.add(nameText);
+        console.log(`Name container for ${name} created with text: ${nameText.text}`);
         return container;
     }
 
@@ -362,6 +314,7 @@ class MainScene extends Phaser.Scene {
         console.log('Updating player:', playerData);
         if (this.players[playerData.id]) {
             const player = this.players[playerData.id];
+            player.name = playerData.name;
             player.sprite.setPosition(playerData.x, playerData.y);
             player.nameContainer.setPosition(playerData.x, playerData.y - 40);
         } else {
@@ -381,6 +334,7 @@ class MainScene extends Phaser.Scene {
     }
 
     update() {
+
         if (this.cursorText) {
             const pointer = this.input.activePointer;
             this.cursorText.setText(`X: ${pointer.worldX} Y: ${pointer.worldY}`);
@@ -401,8 +355,6 @@ class MainScene extends Phaser.Scene {
                 this.player.x = this.targetX;
                 this.player.y = this.targetY;
                 this.moving = false;
-                
-                this.savePlayerPosition();
             }
             
             if (this.playerNameContainer) {
@@ -412,7 +364,8 @@ class MainScene extends Phaser.Scene {
             socket.emit('updatePlayer', {
                 id: socket.id,
                 x: this.player.x,
-                y: this.player.y
+                y: this.player.y,
+                name: this.playerName
             });
         }
 
@@ -421,28 +374,12 @@ class MainScene extends Phaser.Scene {
             this.player.oldX = this.player.x;
             this.player.oldY = this.player.y;
         }
-    }
-
-    savePlayerPosition() {
-        fetch('http://localhost:3000/savePlayerPosition', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ characterId: this.characterId, x: this.player.x, y: this.player.y }),
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Erreur lors de la sauvegarde de la position du joueur');
+        Object.values(this.players).forEach(player => {
+            if (player.nameContainer && player.sprite) {
+                player.nameContainer.setPosition(player.sprite.x, player.sprite.y - 40);
             }
-            return response.text();
-        })
-        .then(data => {
-            console.log('Position du joueur sauvegardée avec succès:', data);
-        })
-        .catch(error => {
-            console.error('Erreur:', error);
         });
+        
     }
 }
 
