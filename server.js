@@ -51,13 +51,6 @@ io.on('connection', (socket) => {
       console.log('Joueur ajouté à la liste des joueurs :', playerData);
     });
 
-    if(numberOfPlayers > 1) {
-      //envoyer les données de tous les joueurs au nouveau joueur
-      for (const [id, playerData] of players) {
-        socket.emit('playerMoved', { id, ...playerData });
-      }
-    }
-
     console.log(`Un joueur s'est connecté, nombre de joueurs: ${numberOfPlayers}`);
 
     socket.on('chat message', async (msg, playerName) => {
@@ -74,11 +67,11 @@ io.on('connection', (socket) => {
       }
     });
 
-    socket.on('joinGame', async (characterId) => {
+    socket.on('joinGame', async (characterId, playerName, x, y) => {
       try {
-        const character = await db.collection('players').findOne({ _id: characterId });
+        const character = await db.collection('players').findOne({ name: playerName });
         // récupère la position du joueur
-        const playerPosition = await db.collection('playerPositions').findOne({ playerId: characterId });
+        const playerPosition = await db.collection('playerPositions').findOne({ playerId: character._id });
         if (!character) {
           return socket.emit('errorMessage', 'Personnage non trouvé');
         }
@@ -98,10 +91,17 @@ io.on('connection', (socket) => {
     });
   
     socket.on('updatePlayer', (playerData) => {
-        //remplacer les données du joueur dans la liste des joueurs
-        players.set(socket.id, playerData);
+        console.log('updatePlayer', playerData);
+        
         //envoyer les nouvelles données du joueur à tous les clients
         socket.broadcast.emit('playerMoved', { id: socket.id, ...playerData });
+        
+        //mettre à jour la position du joueur dans la base de données
+        db.collection('playerPositions').updateOne(
+            { playerId: playerData.id },
+            { $set: { playerId: playerData.id, x: playerData.x, y: playerData.y } },
+            { upsert: true }
+        );
     });
 
     socket.on('createCharacter', async (characterData) => {
@@ -166,34 +166,6 @@ async function addCharacter(characterData) {
     throw err;
   }
 }
-
-
-
-app.get('/chatHistory', async (req, res) => {
-  try {
-      const history = await db.collection('messages').find().sort({ timestamp: -1 }).limit(50).toArray();
-      res.json(history);
-  } catch (err) {
-      console.error('Erreur lors de la récupération de l\'historique du chat:', err);
-      res.status(500).send('Erreur lors de la récupération de l\'historique du chat');
-  }
-});
-
-// Endpoint pour sauvegarder la position du joueur
-app.post('/savePlayerPosition', async (req, res) => {
-    const { x, y, characterId } = req.body;
-    try {
-        await db.collection('playerPositions').updateOne(
-            { playerId: characterId },
-            { $set: { x, y } },
-            { upsert: true }
-        );
-        res.send(`Position du joueur sauvegardée avec succès: x=${x}, y=${y}`);
-    } catch (err) {
-        console.error('Erreur lors de la sauvegarde de la position:', err);
-        res.status(500).send('Erreur lors de la sauvegarde de la position');
-    }
-});
 
 async function getCharacter(name) {
   try {

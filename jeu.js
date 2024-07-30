@@ -48,7 +48,7 @@ class LoginScene extends Phaser.Scene {
                 return;
             }
             console.log('Personnage créé:', character);
-            this.scene.start('MainScene', { playerName: name, characterId: character._id, registered: true });
+            this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, registered: true });
         });
     }
 }
@@ -92,22 +92,18 @@ class MainScene extends Phaser.Scene {
         this.platforms = this.physics.add.staticGroup();
         this.platforms.create(640, 720, 'ground').setScale(2).refreshBody();
 
-        if(socket.emit('getPlayerPosition', this.characterId)) {
-            socket.on('playerPosition', (playerPosition) => {
-                if (playerPosition) {
-                    this.initializePlayer(playerPosition.x, playerPosition.y);
-                } else {
-                    this.initializePlayerWithDefaultPosition();
-                }
-            });
-        } else {
-            this.initializePlayerWithDefaultPosition();
-        }
-
-        this.setupChat();
-        this.setupInputEvents(); 
-        this.setupSocketEvents();
-        this.initializeGameElements();
+        socket.emit('getPlayerPosition', this.characterId);
+        socket.on('playerPosition', (playerPosition) => {
+            if (playerPosition) {
+                this.initializePlayer(playerPosition.x, playerPosition.y);
+            } else {
+                this.initializePlayerWithDefaultPosition();
+            }
+            this.setupChat();
+            this.setupInputEvents(); 
+            this.setupSocketEvents();
+            this.initializeGameElements();
+        });
 
         this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
     }
@@ -120,7 +116,7 @@ class MainScene extends Phaser.Scene {
         this.physics.add.collider(this.player, this.platforms);
         this.createPlayerNameContainer();
         socket.emit('addPlayerToPlayerList', {
-            id: socket.id,
+            id: this.characterId,
             x: this.player.x,
             y: this.player.y,
             name: this.playerName
@@ -271,8 +267,11 @@ class MainScene extends Phaser.Scene {
             console.log('Connexion réussie, rejoindre le jeu');
         }
         console.log(this.playerName + ' a rejoint le jeu');
-        console.log(this);
-        socket.emit('joinGame', this.characterId, this.playerName, this.player.x | '400', this.player.y | '400');
+        
+        let x = this.player ? this.player.x : 400;
+        let y = this.player ? this.player.y : 400;
+        
+        socket.emit('joinGame', this.characterId, this.playerName, x, y);
     }
 
     addNewPlayerToGame(playerData) {
@@ -282,7 +281,7 @@ class MainScene extends Phaser.Scene {
             this.updatePlayerInGame(playerData);
             return;
         }
-        const newPlayer = this.physics.add.sprite(playerData.x, playerData.y, 'dude');
+        const newPlayer = this.physics.add.sprite(playerData.x || 400, playerData.y || 400, 'dude');
         newPlayer.playerId = playerData.id;
         
         const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name);
@@ -362,11 +361,12 @@ class MainScene extends Phaser.Scene {
             }
             
             socket.emit('updatePlayer', {
-                id: socket.id,
+                id: this.characterId,
                 x: this.player.x,
                 y: this.player.y,
                 name: this.playerName
             });
+            console.log('Envoi de la position du joueur au serveur');
         }
 
         if (this.player && (this.player.oldX !== this.player.x || this.player.oldY !== this.player.y)) {
