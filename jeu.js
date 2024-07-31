@@ -249,8 +249,8 @@ class MainScene extends Phaser.Scene {
             console.error('Erreur', error.message);
         });
 
-        socket.on('playerLeft', (playerId) => {
-            this.removePlayerFromGame(playerId);
+        socket.on('playerLeft', (characterId) => {
+            this.removePlayerFromGame(characterId);
         });
 
         socket.on('playerMoved', (playerData) => {
@@ -291,7 +291,7 @@ class MainScene extends Phaser.Scene {
         
         const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name);
         
-        this.players[playerData.id] = { sprite: newPlayer, nameContainer: nameContainer };
+        this.players[playerData.id] = { sprite: newPlayer, nameContainer: nameContainer, playerId: playerData.id };
     
         console.log(`Name container created for ${playerData.name} at (${playerData.x}, ${playerData.y - 40})`);
     }
@@ -327,13 +327,13 @@ class MainScene extends Phaser.Scene {
         }
     }
 
-    removePlayerFromGame(playerId) {
-        console.log('Removing player:', playerId);
-        if (this.players[playerId]) {
-            this.players[playerId].sprite.destroy();
-            this.players[playerId].nameContainer.destroy();
-            delete this.players[playerId];
-            socket.emit('playerLeft', playerId);
+    removePlayerFromGame(characterId) {
+        console.log('Removing player:', characterId);
+        const playerToRemove = Object.values(this.players).find(player => player.playerId === characterId);
+        if (playerToRemove) {
+            playerToRemove.sprite.destroy();
+            playerToRemove.nameContainer.destroy();
+            delete this.players[characterId];
         }
     }
 

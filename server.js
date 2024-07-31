@@ -42,13 +42,12 @@ let numberOfPlayers = 0;
 const players = new Map();
 
 io.on('connection', (socket) => {
-    numberOfPlayers++;
 
-    //ajouter un joueur à la liste des joueurs players
-    socket.on('addPlayerToPlayerList', (playerData) => {
-      players.set(socket.id, playerData);
-      console.log('Joueur ajouté à la liste des joueurs :', playerData);
-    });
+  numberOfPlayers++;
+  socket.on('addPlayerToPlayerList', (playerData) => {
+    players.set(socket.id, { ...playerData, socketId: socket.id });
+    console.log('Joueur ajouté à la liste des joueurs :', playerData);
+  });
 
     console.log(`Un joueur s'est connecté, nombre de joueurs: ${numberOfPlayers}`);
 
@@ -87,9 +86,13 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         numberOfPlayers--;
-        console.log(`Un joueur s'est déconnecté, nombre de joueurs: ${numberOfPlayers}`);
-        players.delete(socket.id);
-        io.emit('playerLeft', socket.id);
+        console.log(`Un joueur s'est déconnecté ${socket.id}, nombre de joueurs: ${numberOfPlayers}`);
+        const playerData = players.get(socket.id);
+        if (playerData) {
+            const characterId = playerData.id;
+            players.delete(socket.id);
+            io.emit('playerLeft', characterId);
+        }
     });
   
     socket.on('updatePlayer', (playerData) => {
