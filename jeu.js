@@ -246,7 +246,7 @@ class MainScene extends Phaser.Scene {
         });
 
         socket.on('errorMessage', (error) => {
-            console.error('Erreur', error.message);
+            console.error('Erreur', error);
         });
 
         socket.on('playerLeft', (characterId) => {
@@ -261,6 +261,17 @@ class MainScene extends Phaser.Scene {
         socket.on('playerJoined', (playerData) => {
             console.log('Player joined:', playerData);
             this.addNewPlayerToGame(playerData);
+        });
+
+        socket.emit('requestAllPlayers');
+
+        // Écouter la réponse du serveur avec la liste de tous les joueurs
+        socket.on('allPlayers', (players) => {
+            players.forEach(playerData => {
+                if (playerData.id !== this.characterId) {  // Ne pas ajouter le joueur local
+                    this.addNewPlayerToGame(playerData);
+                }
+            });
         });
 
     }
