@@ -257,6 +257,20 @@ class MainScene extends Phaser.Scene {
             console.log('Player moved:', playerData);
             this.updatePlayerInGame(playerData);
         });
+
+        socket.on('playerJoined', (playerData) => {
+            console.log('Player joined:', playerData);
+            this.addNewPlayerToGame(playerData);
+        });
+
+        socket.on('players', (players) => {
+            console.log('Joueurs actuels:', players);
+            players.forEach(player => {
+                if (player.id !== this.characterId) {
+                    this.addNewPlayerToGame(player);
+                }
+            });
+        });
     }
     
     joinGame() {
@@ -272,6 +286,7 @@ class MainScene extends Phaser.Scene {
         let y = this.player ? this.player.y : 400;
         
         socket.emit('joinGame', this.characterId, this.playerName, x, y);
+        socket.emit('getCurrentPlayers');
     }
 
     addNewPlayerToGame(playerData) {

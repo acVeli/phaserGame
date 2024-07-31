@@ -45,7 +45,6 @@ io.on('connection', (socket) => {
     numberOfPlayers++;
 
     //ajouter un joueur à la liste des joueurs players
-
     socket.on('addPlayerToPlayerList', (playerData) => {
       players.set(socket.id, playerData);
       console.log('Joueur ajouté à la liste des joueurs :', playerData);
@@ -81,6 +80,15 @@ io.on('connection', (socket) => {
         console.error('Erreur lors de la récupération du personnage :', err);
         socket.emit('errorMessage', 'Erreur lors de la récupération du personnage');
       }
+    });
+
+    socket.on('getPlayers', () => {
+      console.log('getPlayers');
+      const playersArray = [];
+      for (let [id, player] of players) {
+          playersArray.push({ id, ...player });
+      }
+      socket.emit('players', playersArray);
     });
 
     socket.on('disconnect', () => {
