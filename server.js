@@ -75,13 +75,14 @@ io.on('connection', (socket) => {
       socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY });
     });
 
-    socket.on('getPlayers', () => {
-      console.log('getPlayers');
-      const playersArray = [];
-      for (let [id, player] of players) {
-          playersArray.push({ id, ...player });
-      }
-      socket.emit('players', playersArray);
+    socket.on('requestAllPlayers', () => {
+      const allPlayers = Array.from(players.values()).map(player => ({
+          id: player.id,
+          x: player.x,
+          y: player.y,
+          name: player.name
+      }));
+      socket.emit('allPlayers', allPlayers);
     });
 
     socket.on('disconnect', () => {
