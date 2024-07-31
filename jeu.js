@@ -99,11 +99,10 @@ class MainScene extends Phaser.Scene {
             } else {
                 this.initializePlayerWithDefaultPosition();
             }
-            this.setupChat();
-            this.setupInputEvents(); 
-            this.setupSocketEvents();
-            this.initializeGameElements();
         });
+        this.setupChat();
+        this.setupInputEvents(); 
+        this.setupSocketEvents();
 
         this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
     }
@@ -121,6 +120,7 @@ class MainScene extends Phaser.Scene {
             y: this.player.y,
             name: this.playerName
         });
+        this.initializeGameElements(this.player);
     }
 
     initializePlayerWithDefaultPosition() {
@@ -145,8 +145,8 @@ class MainScene extends Phaser.Scene {
         this.playerNameContainer.add(this.playerNameText);
     }
 
-    initializeGameElements() {
-        this.joinGame();
+    initializeGameElements(playerData) {
+        this.joinGame(playerData);
     }
 
 
@@ -263,30 +263,20 @@ class MainScene extends Phaser.Scene {
             this.addNewPlayerToGame(playerData);
         });
 
-        socket.on('players', (players) => {
-            console.log('Joueurs actuels:', players);
-            players.forEach(player => {
-                if (player.id !== this.characterId) {
-                    this.addNewPlayerToGame(player);
-                }
-            });
-        });
     }
     
-    joinGame() {
+    joinGame(playerData) {
         console.log('Rejoindre le jeu');
         if(this.registered) {
+            console.log(playerData);
+            socket.emit('Registered', this.characterId, this.playerName, this.player.x, this.player.y);
             console.log('Enregistrement réussi, rejoindre le jeu');
         } else if(this.loggedIn) {
+            console.log(playerData);
+            socket.emit('LoggedIn', this.characterId, this.playerName, this.player.x, this.player.y);
             console.log('Connexion réussie, rejoindre le jeu');
         }
         console.log(this.playerName + ' a rejoint le jeu');
-        
-        let x = this.player ? this.player.x : 400;
-        let y = this.player ? this.player.y : 400;
-        
-        socket.emit('joinGame', this.characterId, this.playerName, x, y);
-        socket.emit('getCurrentPlayers');
     }
 
     addNewPlayerToGame(playerData) {
@@ -296,7 +286,7 @@ class MainScene extends Phaser.Scene {
             this.updatePlayerInGame(playerData);
             return;
         }
-        const newPlayer = this.physics.add.sprite(playerData.x || 400, playerData.y || 400, 'dude');
+        const newPlayer = this.physics.add.sprite(playerData.x || 688, playerData.y || 231, 'dude');
         newPlayer.playerId = playerData.id;
         
         const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name);

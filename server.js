@@ -66,20 +66,14 @@ io.on('connection', (socket) => {
       }
     });
 
-    socket.on('joinGame', async (characterId, playerName, x, y) => {
-      try {
-        const character = await db.collection('players').findOne({ name: playerName });
-        // récupère la position du joueur
-        const playerPosition = await db.collection('playerPositions').findOne({ playerId: character._id });
-        if (!character) {
-          return socket.emit('errorMessage', 'Personnage non trouvé');
-        }
-        socket.broadcast.emit('playerJoined', { id: socket.id, characterId, name: character.name, ...playerPosition });
-        console.log('Joueur', character.name, 'a rejoint le jeu');
-      } catch (err) {
-        console.error('Erreur lors de la récupération du personnage :', err);
-        socket.emit('errorMessage', 'Erreur lors de la récupération du personnage');
-      }
+    socket.on('LoggedIn', (playerId, playerName, playerX, playerY ) => {
+      console.log('LoggedIn', playerId, playerName, playerX, playerY);
+      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY });
+    });
+
+    socket.on('Registered', (playerId, playerName, playerX, playerY) => {
+      console.log('Registered', playerId, playerName, playerX, playerY);
+      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY });
     });
 
     socket.on('getPlayers', () => {
