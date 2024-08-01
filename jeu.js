@@ -83,6 +83,7 @@ class MainScene extends Phaser.Scene {
         this.load.image('background', 'background.png');
         this.load.image('ground', 'platform.png');
         this.load.image('send-icon', 'send_message.svg', { frameWidth: 50, frameHeight: 50  });
+        this.load.image('scroll-icon', 'scroll.png');
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
     }
 
@@ -151,26 +152,78 @@ class MainScene extends Phaser.Scene {
 
 
     setupChat() {
-        const chatBox = this.add.rectangle(10, 710, 300, 200, 0x333333);
-        chatBox.setAlpha(0.7);
-        chatBox.setOrigin(0, 1);
+        const chatBoxWidth = 300;
+        const chatBoxHeight = 200;
+        const padding = 10;
+        const inputHeight = 30;
+    
+        // Chat box background
+        const chatBox = this.add.rectangle(padding, this.game.config.height - padding, chatBoxWidth, chatBoxHeight, 0x333333)
+            .setOrigin(0, 1)
+            .setAlpha(0.7);
+    
+        // Messages container
+        const messagesContainerHeight = chatBoxHeight - inputHeight - padding * 3;
+        const chatMessagesContainer = this.add.container(padding, this.game.config.height - chatBoxHeight - padding);
+        const mask = this.add.graphics()
+            .fillRect(padding, this.game.config.height - chatBoxHeight - padding, chatBoxWidth - padding * 2, messagesContainerHeight);
+        chatMessagesContainer.setMask(new Phaser.Display.Masks.GeometryMask(this, mask));
+    
+        const chatMessages = this.add.text(0, 0, '', {
+            font: '14px Arial',
+            fill: '#ffffff',
+            wordWrap: { width: chatBoxWidth - padding * 2 },
+            padding: { x: 5, y: 5 }
+        });
+        chatMessagesContainer.add(chatMessages);
+    
+        // Scroll icon
+        const scrollIcon = this.add.image(
+            chatBox.x + chatBoxWidth - padding - 15, 
+            chatBox.y - padding - 15, // Initialement en bas à droite
+            'scroll-icon'
+        )
+        .setOrigin(0.5)
+        .setAlpha(0.7)
+        .setScale(0.4)
+        .setScrollFactor(0)
+        .setVisible(false);
 
-        const chatInput = this.add.text(15, 685, '', {
+        const updateScrollIconPosition = () => {
+            if (chatMessages.height > messagesContainerHeight) {
+                const scrollPercentage = Math.abs(chatMessages.y) / (chatMessages.height - messagesContainerHeight);
+                const iconY = chatBox.y - chatBoxHeight + padding + 15 + scrollPercentage * (messagesContainerHeight - 30);
+                scrollIcon.setPosition(scrollIcon.x, iconY);
+            } else {
+                scrollIcon.setPosition(scrollIcon.x, chatBox.y - padding - 15);
+            }
+        };
+    
+        const updateScrollIconVisibility = () => {
+            const isVisible = chatMessages.height > messagesContainerHeight;
+            scrollIcon.setVisible(isVisible);
+            if (isVisible) {
+                updateScrollIconPosition();
+            }
+        };
+    
+        // Chat input
+        const chatInput = this.add.text(padding, this.game.config.height - inputHeight - padding * 2, '', {
             font: '14px Arial',
             fill: '#ffffff',
             backgroundColor: 'rgba(0,0,0,0.5)',
-            padding: { x: 3, y: 3 },
-            fixedWidth: 270
+            padding: { x: 5, y: 5 },
+            fixedWidth: chatBoxWidth - padding * 2 - 30  // Espace pour l'icône d'envoi
         }).setOrigin(0, 0);
-
+    
         let currentInput = '';
         let isChatActive = false;
-
+    
         const toggleChat = () => {
             isChatActive = !isChatActive;
             chatInput.setBackgroundColor(isChatActive ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)');
         };
-
+    
         this.input.keyboard.on('keydown', (event) => {
             if (event.keyCode === 13) { // Touche Entrée
                 if (!isChatActive) {
@@ -185,42 +238,54 @@ class MainScene extends Phaser.Scene {
                 }
             } else if (isChatActive) {
                 if (event.keyCode === 8 && currentInput.length > 0) {
-                    // Backspace - supprimer le dernier caractère
                     currentInput = currentInput.slice(0, -1);
                 } else if (event.key.length === 1) {
-                    // Ajouter le caractère tapé
                     currentInput += event.key;
                 }
-                
-                // Mettre à jour le texte affiché
                 chatInput.setText(currentInput);
             }
         });
-
-        const sendIcon = this.add.image(295, 700, 'send-icon')
-            .setScale(0.5)
+    
+        const sendIcon = this.add.image(chatBoxWidth - padding, this.game.config.height - inputHeight / 2 - padding * 2, 'send-icon')
+            .setOrigin(1, 0.5)
+            .setScale(0.4)
             .setInteractive()
             .on('pointerdown', () => {
                 if (currentInput) {
                     this.sendChatMessage(currentInput, this.playerName);
                     currentInput = '';
                     chatInput.setText('');
-                    toggleChat(); // Désactiver le chat après l'envoi
+                    toggleChat();
                 }
             });
-
-        const chatMessages = this.add.text(15, 520, '', {
-            font: '14px Arial',
-            fill: '#ffffff',
-            wordWrap: { width: 280 },
-            padding: { x: 5, y: 5 }
-        });
-
+    
         this.addChatMessage = (message, playerName) => {
-            chatMessages.text += `${playerName}: ${message}\n`;
-            // Faire défiler vers le bas si nécessaire
+            const newMessage = `${playerName}: ${message}\n`;
+            const currentMessages = chatMessages.text.split('\n');
+            
+            if (currentMessages.length >= 20) {
+                currentMessages.shift();
+            }
+            currentMessages.push(newMessage.trim());
+            
+            chatMessages.setText(currentMessages.join('\n'));
+    
+            if (chatMessages.height > messagesContainerHeight) {
+                chatMessages.y = messagesContainerHeight - chatMessages.height;
+            }
+    
+            updateScrollIconVisibility();
         };
-
+    
+        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            if (chatMessages.height > messagesContainerHeight) {
+                chatMessages.y -= deltaY;
+                chatMessages.y = Phaser.Math.Clamp(chatMessages.y, messagesContainerHeight - chatMessages.height, 0);
+                updateScrollIconPosition();
+            }
+        });
+    
+    
         socket.on('chat message', (msg, playerName) => {
             console.log('Message reçu:', msg + ' de ' + playerName);
             this.addChatMessage(msg, playerName);
