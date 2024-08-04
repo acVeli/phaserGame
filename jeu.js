@@ -197,6 +197,15 @@ class MainScene extends Phaser.Scene {
     }
 
     setupPlayerInventory() {
+        // Création de l'espace equipement dans l'inventaire
+        // fixer le container à droite de celui existant
+        const equipmentContainer = this.add.container(990, 360);
+        const equipmentBackground = this.add.rectangle(0, 0, 200, 400, 0x333333);
+        equipmentBackground.setAlpha(0.8);
+        equipmentContainer.add(equipmentBackground);
+        equipmentContainer.setVisible(false);
+        equipmentContainer.setDepth(1);
+
         const inventoryContainer = this.add.container(640, 360);
         const inventoryBackground = this.add.rectangle(0, 0, 450, 400, 0x333333);
         inventoryBackground.setAlpha(0.8);
@@ -284,6 +293,7 @@ class MainScene extends Phaser.Scene {
         this.toggleInventory = () => {
             this.isInventoryActive = !this.isInventoryActive;
             inventoryContainer.setVisible(this.isInventoryActive);
+            equipmentContainer.setVisible(this.isInventoryActive);
             if (this.isInventoryActive) {
                 this.displayInventoryItems(inventorySlots, this.playerInventory, modalContainer, modalText);
             } else {
@@ -298,7 +308,7 @@ class MainScene extends Phaser.Scene {
             console.log('état de l\'inventaire:', this.isInventoryActive);
         }
     
-        const closeButton = this.add.text(200, -170, 'X', { 
+        const closeButton = this.add.text(200, -190, 'X', { 
             fontFamily: 'Arial', 
             fontSize: 20, 
             color: '#ffffff' 
