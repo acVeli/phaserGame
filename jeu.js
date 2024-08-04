@@ -41,7 +41,7 @@ class LoginScene extends Phaser.Scene {
         socket.emit('getCharacter', name);
         socket.on('character', (character) => {
             if (character) {
-                this.scene.start('MainScene', { playerName: name, characterId: character._id, loggedIn: true });
+                this.scene.start('MainScene', { playerName: name, characterId: character._id, level: character.level, loggedIn: true });
                 console.log('Personnage trouvé', character);
             } 
         });
@@ -63,7 +63,7 @@ class LoginScene extends Phaser.Scene {
                     }
                     socket.emit('giveStartingItems', character.insertedId);
                     console.log('Personnage créé:', character);
-                    this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, registered: true });
+                    this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, level: 1, registered: true });
                 });
             } else {
                 console.error('Le nom de personnage est déjà utilisé ou invalide');
@@ -102,6 +102,7 @@ class MainScene extends Phaser.Scene {
         this.playerInventory = [];
         this.isChatActive = false;
         this.isInventoryActive = false;
+        this.playerLevel = data.level || 1;
     }
 
     preload() {
@@ -163,7 +164,8 @@ class MainScene extends Phaser.Scene {
             id: this.characterId,
             x: this.player.x,
             y: this.player.y,
-            name: this.playerName
+            name: this.playerName,
+            level: this.playerLevel
         });
         this.initializeGameElements(this.player);
     }
@@ -176,7 +178,7 @@ class MainScene extends Phaser.Scene {
         this.playerNameContainer = this.add.container(this.player.x, this.player.y - 40);
         const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
         textBg.setAlpha(0.7);
-        this.playerNameText = this.add.text(0, 0, this.playerName, { 
+        this.playerNameText = this.add.text(0, 0, this.playerName +' '+'Lvl: '+this.playerLevel, { 
             font: '16px Arial', 
             fill: '#ffffff',
             padding: { x: 5, y: 2 }
@@ -503,11 +505,11 @@ class MainScene extends Phaser.Scene {
         console.log('Rejoindre le jeu');
         if(this.registered) {
             console.log(playerData);
-            socket.emit('Registered', this.characterId, this.playerName, this.player.x, this.player.y);
+            socket.emit('Registered', this.characterId, this.playerName, this.player.x, this.player.y, this.playerLevel);
             console.log('Enregistrement réussi, rejoindre le jeu');
         } else if(this.loggedIn) {
             console.log(playerData);
-            socket.emit('LoggedIn', this.characterId, this.playerName, this.player.x, this.player.y);
+            socket.emit('LoggedIn', this.characterId, this.playerName, this.player.x, this.player.y, this.playerLevel);
             console.log('Connexion réussie, rejoindre le jeu');
         }
         console.log(this.playerName + ' a rejoint le jeu');
@@ -523,18 +525,18 @@ class MainScene extends Phaser.Scene {
         const newPlayer = this.physics.add.sprite(playerData.x || 688, playerData.y || 231, 'dude');
         newPlayer.playerId = playerData.id;
         
-        const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name);
+        const nameContainer = this.createNameContainer(playerData.x, playerData.y, playerData.name, playerData.level);
         
         this.players[playerData.id] = { sprite: newPlayer, nameContainer: nameContainer, playerId: playerData.id };
     
         console.log(`Name container created for ${playerData.name} at (${playerData.x}, ${playerData.y - 40})`);
     }
 
-    createNameContainer(x, y, name) {
+    createNameContainer(x, y, name, level) {
         const container = this.add.container(x, y - 40);
         const textBg = this.add.rectangle(0, 0, 0, 20, 0x333333);
         textBg.setAlpha(0.7);
-        const nameText = this.add.text(0, 0, name, { 
+        const nameText = this.add.text(0, 0, name +' '+'Lvl: '+ level, { 
             font: '16px Arial', 
             fill: '#ffffff',
             padding: { x: 5, y: 2 }

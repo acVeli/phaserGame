@@ -81,14 +81,14 @@ io.on('connection', (socket) => {
       }
     });
 
-    socket.on('LoggedIn', (playerId, playerName, playerX, playerY ) => {
+    socket.on('LoggedIn', (playerId, playerName, playerX, playerY, playerLevel ) => {
       console.log('LoggedIn', playerId, playerName, playerX, playerY);
-      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY });
+      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
     });
 
-    socket.on('Registered', (playerId, playerName, playerX, playerY) => {
+    socket.on('Registered', (playerId, playerName, playerX, playerY, playerLevel) => {
       console.log('Registered', playerId, playerName, playerX, playerY);
-      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY });
+      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
     });
 
     socket.on('requestAllPlayers', () => {
@@ -96,7 +96,8 @@ io.on('connection', (socket) => {
           id: player.id,
           x: player.x,
           y: player.y,
-          name: player.name
+          name: player.name,
+          level: player.level
       }));
       socket.emit('allPlayers', allPlayers);
     });
