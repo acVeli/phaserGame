@@ -19,11 +19,21 @@ class LoginScene extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => {
                 const name = nameInput.node.value;
-                if(socket.emit('checkName', name)) {
-                    this.loginCharacter(name);
-                } else {  
-                    this.createCharacter(name);
-                }
+                socket.emit('checkNameForLogin', name);
+                socket.on('nameCheckedForLogin', (isNameValid) => {
+                    if (isNameValid) {
+                        this.loginCharacter(name);
+                    } else {
+                        this.add.text(640, 500, 'Personnage non trouvé', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+                        this.add.text('Si vous n\'avez pas de personnage, veuillez en créer un.', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+                        const createButton = this.add.text(640, 550, 'Créer un personnage', { fontSize: '24px', fill: '#0f0' })
+                            .setOrigin(0.5)
+                            .setInteractive()
+                            .on('pointerdown', () => {
+                                this.createCharacter(name);
+                            });
+                    }
+                });
             });
     }
 
@@ -33,23 +43,34 @@ class LoginScene extends Phaser.Scene {
             if (character) {
                 this.scene.start('MainScene', { playerName: name, characterId: character._id, loggedIn: true });
                 console.log('Personnage trouvé', character);
-            } else {
-                this.createCharacter(name);
-            }
+            } 
         });
     }
 
     createCharacter(name) {
-        socket.emit('createCharacter', { name: name });
-        socket.on('registrationSuccess', (character) => {
-            if (!character) {
-                console.error('Erreur lors de la création du personnage');
-                this.add.text(640, 500, 'Erreur lors de la création du personnage', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-                return;
+
+        socket.emit('checkNameForRegister', name);
+
+        socket.on('nameCheckedForRegister', (isNameValid) => {
+
+            if(isNameValid) {
+                socket.emit('createCharacter', { name: name });
+                socket.on('registrationSuccess', (character) => {
+                    if (!character) {
+                        console.error('Erreur lors de la création du personnage');
+                        this.add.text(640, 500, 'Erreur lors de la création du personnage', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+                        return;
+                    }
+                    socket.emit('giveStartingItems', character.insertedId);
+                    console.log('Personnage créé:', character);
+                    this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, registered: true });
+                });
+            } else {
+                console.error('Le nom de personnage est déjà utilisé ou invalide');
+                this.add.text(640, 500, 'Le nom de personnage est déjà utilisé ou invalide', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+                this.add.text(640, 550, 'Entrez un autre nom et veuillez ne pas utiliser d\'espace ou de caractères spéciaux.', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+                this.add.text(640, 600, 'Le nom doit être composé de 1 à 16 caractères alphanumériques.', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
             }
-            socket.emit('giveStartingItems', character.insertedId);
-            console.log('Personnage créé:', character);
-            this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, registered: true });
         });
     }
 }

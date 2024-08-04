@@ -113,7 +113,6 @@ io.on('connection', (socket) => {
     });
   
     socket.on('updatePlayer', (playerData) => {
-        console.log('updatePlayer', playerData);
         
         //envoyer les nouvelles données du joueur à tous les clients
         socket.broadcast.emit('playerMoved', { id: socket.id, ...playerData });
@@ -124,6 +123,19 @@ io.on('connection', (socket) => {
             { $set: { playerId: playerData.id, x: playerData.x, y: playerData.y } },
             { upsert: true }
         );
+    });
+
+    socket.on('checkNameForRegister'  , async (name) => {
+      // Vérifier si le nom est déjà utilisé
+      const character = await getCharacter(name);
+      // Vérifier si le nom rentre dans le regex ^[a-zA-Z0-9]{1,16}$
+      const regex = /^[a-zA-Z0-9]{1,16}$/;
+      const validName = regex.test(name);
+      if(!character && validName) {
+        socket.emit('nameCheckedForRegister', true);
+      } else {
+        socket.emit('nameCheckedForRegister', false);
+      }
     });
 
     socket.on('getInventory', async (characterId) => {
@@ -192,10 +204,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('checkName', async (name) => {
+  socket.on('checkNameForLogin', async (name) => {
     try {
       const character = await getCharacter(name);
-      socket.emit('nameChecked', !!character);
+      socket.emit('nameCheckedForLogin', !!character);
     } catch (err) {
       console.error('Erreur lors de la vérification du nom :', err);
       socket.emit('errorMessage', 'Erreur lors de la vérification du nom');
@@ -203,11 +215,6 @@ io.on('connection', (socket) => {
   });
 
 });
-
-//console.log de players tous les 5 secondes
-setInterval(() => {
-  console.log(players);
-}, 5000);
 
 async function addCharacter(characterData) {
   try {
