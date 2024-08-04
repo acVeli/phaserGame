@@ -41,8 +41,8 @@ app.use(bodyParser.json());
 let numberOfPlayers = 0;
 
 const gameItems = [
-  { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip' },
-  { id: 2, name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume' },
+  { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description : 'Une épée en bois basique' },
+  { id: 2, name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume', description : 'Une potion de soin basique' },
 ];
 
 async function insertGameItems(gameItems) {
@@ -161,8 +161,8 @@ io.on('connection', (socket) => {
   socket.on('giveStartingItems', async (characterId) => {
     try {
       const startingItems = [
-        { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip'},
-        { id: 2,name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume' },
+        { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description: 'Une épée en bois basique' },
+        { id: 2,name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume', description: 'Une potion de soin basique' },
       ];
       await db.collection('inventories').insertOne({ playerId: characterId, items: startingItems });
       socket.emit('startingItemsGiven', startingItems);

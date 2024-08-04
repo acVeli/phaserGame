@@ -79,14 +79,17 @@ class MainScene extends Phaser.Scene {
         this.loggedIn = data.loggedIn || false;
         console.log('MainScene initialized with', data);
         this.playerInventory = [];
+        this.isChatActive = false;
+        this.isInventoryActive = false;
     }
 
     preload() {
-        this.load.image('background', 'background.png');
+        this.load.image('background', 'assets/img/maps/background.png');
         this.load.image('ground', 'platform.png');
-        this.load.image('send-icon', 'send_message.svg', { frameWidth: 50, frameHeight: 50  });
+        this.load.image('send-icon', 'assets/img/icons/send_message.png', { frameWidth: 50, frameHeight: 50  });
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
         this.loadGameItems();
+        this.load.audio('backgroundMusic', [ 'assets/sounds/background.mp3' ]);
     }
 
     loadGameItems() {
@@ -117,8 +120,14 @@ class MainScene extends Phaser.Scene {
         this.setupInputEvents(); 
         this.setupSocketEvents();
         this.setupPlayerInventory();
+        this.playMusic();
 
         this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
+    }
+
+    playMusic() {
+        const music = this.sound.add('backgroundMusic');
+        music.play({ loop: true, volume: 0.025 });
     }
 
     initializePlayer(x, y) {
@@ -164,17 +173,13 @@ class MainScene extends Phaser.Scene {
     }
 
     setupPlayerInventory() {
-        let isInventoryActive = false;
-    
-        // Ajuster la taille du conteneur
         const inventoryContainer = this.add.container(640, 360);
-        const inventoryBackground = this.add.rectangle(0, 0, 450, 400, 0x333333); // Augmenter légèrement la hauteur
+        const inventoryBackground = this.add.rectangle(0, 0, 450, 400, 0x333333);
         inventoryBackground.setAlpha(0.8);
         inventoryContainer.add(inventoryBackground);
         inventoryContainer.setVisible(false);
         inventoryContainer.setDepth(1);
     
-        // Ajouter un titre avec plus d'espace au-dessus
         const title = this.add.text(0, -170, 'Inventaire', { 
             fontFamily: 'Arial', 
             fontSize: 24, 
@@ -184,13 +189,12 @@ class MainScene extends Phaser.Scene {
         inventoryContainer.add(title);
     
         const inventorySlots = [];
-        const slotSize = 65; // Réduire légèrement la taille des slots
-        const padding = 10; // Espace entre les slots
+        const slotSize = 65;
+        const padding = 10;
         const cols = 5;
         const rows = 4;
     
-        // Ajuster la position de départ des slots
-        const startY = -120; // Déplacer les slots vers le bas pour laisser plus d'espace au titre
+        const startY = -120;
     
         for (let i = 0; i < cols * rows; i++) {
             const x = ((i % cols) - Math.floor(cols/2)) * (slotSize + padding);
@@ -201,15 +205,34 @@ class MainScene extends Phaser.Scene {
             inventoryContainer.add(slot);
             inventorySlots.push(slot);
         }
-
+    
+        // Création de la fenêtre modale
+        const modalContainer = this.add.container(640, 360);
+        modalContainer.setDepth(2);
+        modalContainer.setVisible(false);
+    
+        const modalBackground = this.add.rectangle(0, 0, 200, 100, 0x000000);
+        modalBackground.setAlpha(0.8);
+        modalContainer.add(modalBackground);
+    
+        const modalText = this.add.text(0, 0, '', { 
+            fontFamily: 'Arial', 
+            fontSize: 16, 
+            color: '#ffffff',
+            align: 'center',
+            wordWrap: { width: 180 }
+        });
+        modalText.setOrigin(0.5);
+        modalContainer.add(modalText);
+    
         socket.emit('getInventory', this.characterId);
         socket.on('inventory', (inventory) => {
             console.log('Inventaire du joueur:', inventory);
             this.playerInventory = inventory;
-            this.displayInventoryItems(inventorySlots, inventory);
+            this.displayInventoryItems(inventorySlots, inventory, modalContainer, modalText);
         });
-
-        this.displayInventoryItems = (slots, items) => {
+    
+        this.displayInventoryItems = (slots, items, modalContainer, modalText) => {
             let characterItems = items.items;
             const slotsNeeded = characterItems.length;
             console.log('Affichage des objets de l\'inventaire:', items);
@@ -219,48 +242,47 @@ class MainScene extends Phaser.Scene {
                 const itemSprite = this.add.image(slot.x, slot.y, 'item' + item.id);
                 itemSprite.setDisplaySize(slotSize, slotSize);
                 inventoryContainer.add(itemSprite);
+    
+                // Ajout des interactions pour le survol
+                itemSprite.setInteractive();
+                itemSprite.on('pointerover', () => {
+                    console.log(item);
+                    modalText.setText(`${item.name}\n\n${item.description}`);
+                    modalContainer.setPosition(itemSprite.x + inventoryContainer.x + 130, itemSprite.y + inventoryContainer.y);
+                    modalContainer.setVisible(true);
+                });
+                itemSprite.on('pointerout', () => {
+                    modalContainer.setVisible(false);
+                });
             }
         }
-
-        
-        this.input.keyboard.on('keydown', (event) => {
-            if (event.key === 'i') {
-                if(!isInventoryActive) {
-                    console.log('Inventaire:', this.playerInventory);
-                    toggleInventory();
-                }else {
-                    toggleInventory();
-                }
-            }
-        });
-
-        const toggleInventory = () => {
-            isInventoryActive = !isInventoryActive;
-            inventoryContainer.setVisible(isInventoryActive);
-            if (isInventoryActive) {
-                this.displayInventoryItems(inventorySlots, this.playerInventory);
+    
+        this.toggleInventory = () => {
+            this.isInventoryActive = !this.isInventoryActive;
+            inventoryContainer.setVisible(this.isInventoryActive);
+            if (this.isInventoryActive) {
+                this.displayInventoryItems(inventorySlots, this.playerInventory, modalContainer, modalText);
             } else {
-                // Nettoyez les anciens sprites d'objets
                 inventoryContainer.list.forEach(child => {
                     if (child instanceof Phaser.GameObjects.Image || 
                         (child instanceof Phaser.GameObjects.Text && child !== title && child !== closeButton)) {
                         child.destroy();
                     }
                 });
+                modalContainer.setVisible(false);
             }
-            console.log('état de l\'inventaire:', isInventoryActive);
+            console.log('état de l\'inventaire:', this.isInventoryActive);
         }
-
+    
         const closeButton = this.add.text(200, -170, 'X', { 
             fontFamily: 'Arial', 
             fontSize: 20, 
             color: '#ffffff' 
         });
         closeButton.setInteractive();
-        closeButton.on('pointerdown', toggleInventory);
+        closeButton.on('pointerdown', this.toggleInventory);
         inventoryContainer.add(closeButton);
     }
-
 
     setupChat() {
         const chatBox = this.add.rectangle(10, 710, 300, 200, 0x333333);
@@ -276,16 +298,15 @@ class MainScene extends Phaser.Scene {
         }).setOrigin(0, 0);
 
         let currentInput = '';
-        let isChatActive = false;
 
         const toggleChat = () => {
-            isChatActive = !isChatActive;
-            chatInput.setBackgroundColor(isChatActive ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)');
+            this.isChatActive = !this.isChatActive;
+            chatInput.setBackgroundColor(this.isChatActive ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)');
         };
 
         this.input.keyboard.on('keydown', (event) => {
-            if (event.keyCode === 13) { // Touche Entrée
-                if (!isChatActive) {
+            if (event.key === 'Enter') {
+                if (!this.isChatActive) {
                     toggleChat(); // Activer le chat
                 } else {
                     if (currentInput) {
@@ -295,22 +316,21 @@ class MainScene extends Phaser.Scene {
                     }
                     toggleChat(); // Désactiver le chat après l'envoi
                 }
-            } else if (isChatActive) {
-                if (event.keyCode === 8 && currentInput.length > 0) {
-                    // Backspace - supprimer le dernier caractère
+            } else if (this.isChatActive) {
+                if (event.key === 'Backspace' && currentInput.length > 0) {
                     currentInput = currentInput.slice(0, -1);
                 } else if (event.key.length === 1) {
-                    // Ajouter le caractère tapé
                     currentInput += event.key;
                 }
-                
-                // Mettre à jour le texte affiché
                 chatInput.setText(currentInput);
+            } else if (event.key === 'i' && !this.isChatActive) {
+                this.toggleInventory();
             }
         });
 
         const sendIcon = this.add.image(295, 700, 'send-icon')
             .setScale(0.5)
+            .setOrigin(0.5, 0.75)
             .setInteractive()
             .on('pointerdown', () => {
                 if (currentInput) {
@@ -330,7 +350,6 @@ class MainScene extends Phaser.Scene {
 
         this.addChatMessage = (message, playerName) => {
             chatMessages.text += `${playerName}: ${message}\n`;
-            // Faire défiler vers le bas si nécessaire
         };
 
         socket.on('chat message', (msg, playerName) => {
@@ -377,15 +396,13 @@ class MainScene extends Phaser.Scene {
 
         socket.emit('requestAllPlayers');
 
-        // Écouter la réponse du serveur avec la liste de tous les joueurs
         socket.on('allPlayers', (players) => {
             players.forEach(playerData => {
-                if (playerData.id !== this.characterId) {  // Ne pas ajouter le joueur local
+                if (playerData.id !== this.characterId) {
                     this.addNewPlayerToGame(playerData);
                 }
             });
         });
-
     }
     
     joinGame(playerData) {
@@ -461,7 +478,6 @@ class MainScene extends Phaser.Scene {
     }
 
     update() {
-
         if (this.cursorText) {
             const pointer = this.input.activePointer;
             this.cursorText.setText(`X: ${pointer.worldX} Y: ${pointer.worldY}`);
@@ -502,15 +518,14 @@ class MainScene extends Phaser.Scene {
             this.player.oldX = this.player.x;
             this.player.oldY = this.player.y;
         }
+
         Object.values(this.players).forEach(player => {
             if (player.nameContainer && player.sprite) {
                 player.nameContainer.setPosition(player.sprite.x, player.sprite.y - 40);
             }
         });
-        
     }
 }
-
 
 
 
