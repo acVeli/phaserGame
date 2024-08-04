@@ -9,6 +9,7 @@ const io = require('socket.io')(http, {
   },
 });
 const { MongoClient } = require('mongodb');
+const { on } = require('events');
 
 let mongoClient, db;
 
@@ -39,10 +40,25 @@ app.use(bodyParser.json());
 
 let numberOfPlayers = 0;
 
+const gameItems = [
+  { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip' },
+  { id: 2, name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume' },
+];
+
+async function insertGameItems(gameItems) {
+  const items = await db.collection('gameItems').find().toArray();
+  if (items.length === 0) {
+    await db.collection('gameItems').insertMany(gameItems);
+  } else {
+    await db.collection('gameItems').deleteMany({});
+    await db.collection('gameItems').insertMany(gameItems);
+  }
+}
+
 const players = new Map();
 
 io.on('connection', (socket) => {
-
+  
   numberOfPlayers++;
   socket.on('addPlayerToPlayerList', (playerData) => {
     players.set(socket.id, { ...playerData, socketId: socket.id });
@@ -110,6 +126,17 @@ io.on('connection', (socket) => {
         );
     });
 
+    socket.on('getInventory', async (characterId) => {
+      try {
+        const inventory = await db.collection('inventories').findOne({ playerId: characterId });
+        socket.emit('inventory', inventory);
+        console.log('Inventaire récupéré avec succès pour le joueur :', characterId);
+      } catch (err) {
+        console.error('Erreur lors de la récupération de l\'inventaire :', err);
+        socket.emit('errorMessage', 'Erreur lors de la récupération de l\'inventaire');
+      }
+    });
+
     socket.on('createCharacter', async (characterData) => {
       try {
         const character = await addCharacter(characterData);
@@ -119,6 +146,30 @@ io.on('connection', (socket) => {
         console.error('Erreur lors de la création du personnage :', err);
         socket.emit('errorMessage', 'Erreur lors de la création du personnage');
       }
+  });
+
+  socket.on('getGameItems', async () => {
+    try {
+      const gameItems = await db.collection('gameItems').find().toArray();
+      socket.emit('gameItems', gameItems);
+    } catch (err) {
+      console.error('Erreur lors de la récupération des objets de jeu :', err);
+      socket.emit('errorMessage', 'Erreur lors de la récupération des objets de jeu');
+    }
+  });
+
+  socket.on('giveStartingItems', async (characterId) => {
+    try {
+      const startingItems = [
+        { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip'},
+        { id: 2,name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume' },
+      ];
+      await db.collection('inventories').insertOne({ playerId: characterId, items: startingItems });
+      socket.emit('startingItemsGiven', startingItems);
+    } catch (err) {
+      console.error('Erreur lors de l\'ajout des objets de départ :', err);
+      socket.emit('errorMessage', 'Erreur lors de l\'ajout des objets de départ');
+    }
   });
 
   socket.on('getPlayerPosition', async (characterId) => {
@@ -187,6 +238,7 @@ async function getCharacter(name) {
 async function startServer() {
   try {
     ({ client: mongoClient, db } = await connectToMongo());
+    await insertGameItems(gameItems);
     
     http.listen(PORT, () => {
       console.log(`Serveur en écoute sur le port ${PORT}`);
