@@ -47,6 +47,7 @@ class LoginScene extends Phaser.Scene {
                 this.add.text(640, 500, 'Erreur lors de la création du personnage', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
                 return;
             }
+            socket.emit('giveStartingItems', character.insertedId);
             console.log('Personnage créé:', character);
             this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, registered: true });
         });
@@ -77,6 +78,7 @@ class MainScene extends Phaser.Scene {
         this.registered = data.registered || false;
         this.loggedIn = data.loggedIn || false;
         console.log('MainScene initialized with', data);
+        this.playerInventory = [];
     }
 
     preload() {
@@ -85,6 +87,17 @@ class MainScene extends Phaser.Scene {
         this.load.image('send-icon', 'send_message.svg', { frameWidth: 50, frameHeight: 50  });
         this.load.image('scroll-icon', 'scroll.png');
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
+        this.loadGameItems();
+    }
+
+    loadGameItems() {
+        socket.emit('getGameItems');
+        socket.on('gameItems', (gameItems) => {
+            console.log('Objets de jeu:', gameItems);
+            gameItems.forEach(item => {
+                this.load.image('item'+item.id, `assets/img/items/${item.id}.jpg`);
+            });
+        });
     }
 
     create() {
@@ -104,6 +117,7 @@ class MainScene extends Phaser.Scene {
         this.setupChat();
         this.setupInputEvents(); 
         this.setupSocketEvents();
+        this.setupPlayerInventory();
 
         this.cursorText = this.add.text(10, 10, '', { font: '16px Courier', fill: '#000000' });
     }
@@ -148,6 +162,104 @@ class MainScene extends Phaser.Scene {
 
     initializeGameElements(playerData) {
         this.joinGame(playerData);
+    }
+
+    setupPlayerInventory() {
+        let isInventoryActive = false;
+    
+        // Ajuster la taille du conteneur
+        const inventoryContainer = this.add.container(640, 360);
+        const inventoryBackground = this.add.rectangle(0, 0, 450, 400, 0x333333); // Augmenter légèrement la hauteur
+        inventoryBackground.setAlpha(0.8);
+        inventoryContainer.add(inventoryBackground);
+        inventoryContainer.setVisible(false);
+        inventoryContainer.setDepth(1);
+    
+        // Ajouter un titre avec plus d'espace au-dessus
+        const title = this.add.text(0, -170, 'Inventaire', { 
+            fontFamily: 'Arial', 
+            fontSize: 24, 
+            color: '#ffffff' 
+        });
+        title.setOrigin(0.5);
+        inventoryContainer.add(title);
+    
+        const inventorySlots = [];
+        const slotSize = 65; // Réduire légèrement la taille des slots
+        const padding = 10; // Espace entre les slots
+        const cols = 5;
+        const rows = 4;
+    
+        // Ajuster la position de départ des slots
+        const startY = -120; // Déplacer les slots vers le bas pour laisser plus d'espace au titre
+    
+        for (let i = 0; i < cols * rows; i++) {
+            const x = ((i % cols) - Math.floor(cols/2)) * (slotSize + padding);
+            const y = startY + (Math.floor(i / cols)) * (slotSize + padding);
+            
+            const slot = this.add.rectangle(x, y, slotSize, slotSize, 0x666666);
+            slot.setStrokeStyle(2, 0x999999);
+            inventoryContainer.add(slot);
+            inventorySlots.push(slot);
+        }
+
+        socket.emit('getInventory', this.characterId);
+        socket.on('inventory', (inventory) => {
+            console.log('Inventaire du joueur:', inventory);
+            this.playerInventory = inventory;
+            this.displayInventoryItems(inventorySlots, inventory);
+        });
+
+        this.displayInventoryItems = (slots, items) => {
+            let characterItems = items.items;
+            const slotsNeeded = characterItems.length;
+            console.log('Affichage des objets de l\'inventaire:', items);
+            for(let i = 0; i < slotsNeeded; i++) {
+                const item = characterItems[i];
+                const slot = slots[i];
+                const itemSprite = this.add.image(slot.x, slot.y, 'item' + item.id);
+                itemSprite.setDisplaySize(slotSize, slotSize);
+                inventoryContainer.add(itemSprite);
+            }
+        }
+
+        
+        this.input.keyboard.on('keydown', (event) => {
+            if (event.key === 'i') {
+                if(!isInventoryActive) {
+                    console.log('Inventaire:', this.playerInventory);
+                    toggleInventory();
+                }else {
+                    toggleInventory();
+                }
+            }
+        });
+
+        const toggleInventory = () => {
+            isInventoryActive = !isInventoryActive;
+            inventoryContainer.setVisible(isInventoryActive);
+            if (isInventoryActive) {
+                this.displayInventoryItems(inventorySlots, this.playerInventory);
+            } else {
+                // Nettoyez les anciens sprites d'objets
+                inventoryContainer.list.forEach(child => {
+                    if (child instanceof Phaser.GameObjects.Image || 
+                        (child instanceof Phaser.GameObjects.Text && child !== title && child !== closeButton)) {
+                        child.destroy();
+                    }
+                });
+            }
+            console.log('état de l\'inventaire:', isInventoryActive);
+        }
+
+        const closeButton = this.add.text(200, -170, 'X', { 
+            fontFamily: 'Arial', 
+            fontSize: 20, 
+            color: '#ffffff' 
+        });
+        closeButton.setInteractive();
+        closeButton.on('pointerdown', toggleInventory);
+        inventoryContainer.add(closeButton);
     }
 
 
