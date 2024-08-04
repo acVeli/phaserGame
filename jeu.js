@@ -311,7 +311,7 @@ class MainScene extends Phaser.Scene {
     setupChat() {
         const chatBoxWidth = 300;
         const chatBoxHeight = 200;
-        const padding = 10;
+        const padding = 1;
         const inputHeight = 30;
     
         // Chat box background
@@ -365,12 +365,12 @@ class MainScene extends Phaser.Scene {
         };
     
         // Chat input
-        const chatInput = this.add.text(padding, this.game.config.height - inputHeight - padding * 2, '', {
+        const chatInput = this.add.text(1, 693, '', {
             font: '14px Arial',
             fill: '#ffffff',
             backgroundColor: 'rgba(0,0,0,0.5)',
             padding: { x: 5, y: 5 },
-            fixedWidth: chatBoxWidth - padding * 2 - 30  // Espace pour l'icône d'envoi
+            fixedWidth: 270 
         }).setOrigin(0, 0);
     
         let currentInput = '';
@@ -407,7 +407,7 @@ class MainScene extends Phaser.Scene {
             }
         });
 
-        const sendIcon = this.add.image(295, 700, 'send-icon')
+        const sendIcon = this.add.image(285, 710, 'send-icon')
             .setScale(0.5)
             .setOrigin(0.5, 0.75)
             .setInteractive()
@@ -422,19 +422,19 @@ class MainScene extends Phaser.Scene {
     
             this.addChatMessage = (message, playerName) => {
 
-            const newMessage = `${playerName}: ${message}\n`;
-            const currentMessages = chatMessages.text.split('\n');
-            
-            if (currentMessages.length >= 20) {
-                currentMessages.shift();
-            }
-            currentMessages.push(newMessage.trim());
-            
-            chatMessages.setText(currentMessages.join('\n'));
-    
-            if (chatMessages.height > messagesContainerHeight) {
-                chatMessages.y = messagesContainerHeight - chatMessages.height;
-            }
+                const newMessage = `${playerName}: ${message}\n`;
+                const currentMessages = chatMessages.text.split('\n');
+                
+                if (currentMessages.length >= 20) {
+                    currentMessages.shift();
+                }
+                currentMessages.push(newMessage.trim());
+                
+                chatMessages.setText(currentMessages.join('\n'));
+        
+                if (chatMessages.height > messagesContainerHeight) {
+                    chatMessages.y = messagesContainerHeight - chatMessages.height;
+                }
     
             updateScrollIconVisibility();
         };
