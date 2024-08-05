@@ -62,6 +62,7 @@ class LoginScene extends Phaser.Scene {
                         return;
                     }
                     socket.emit('giveStartingItems', character.insertedId);
+                    socket.emit('giveStartingGold', character.insertedId);
                     console.log('Personnage créé:', character);
                     this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, level: 1, registered: true });
                 });
@@ -103,13 +104,15 @@ class MainScene extends Phaser.Scene {
         this.isChatActive = false;
         this.isInventoryActive = false;
         this.playerLevel = data.level || 1;
+        this.playerGold = 0;
     }
 
     preload() {
         this.load.image('background', 'assets/img/maps/background.png');
         this.load.image('ground', 'platform.png');
         this.load.image('send-icon', 'assets/img/icons/send_message.png', { frameWidth: 50, frameHeight: 50  });
-        this.load.image('scroll-icon', 'scroll.png');
+        this.load.image('scroll-icon', 'assets/img/icons/scroll.png');
+        this.load.image('gold_pouch', 'assets/img/icons/gold_pouch.png');
         this.load.spritesheet('dude', 'https://examples.phaser.io/assets/sprites/dude.png', { frameWidth: 32, frameHeight: 48 });
         this.loadGameItems();
         this.load.audio('backgroundMusic', [ 'assets/sounds/background.mp3' ]);
@@ -197,8 +200,6 @@ class MainScene extends Phaser.Scene {
     }
 
     setupPlayerInventory() {
-        // Création de l'espace equipement dans l'inventaire
-        // fixer le container à droite de celui existant
         const equipmentContainer = this.add.container(990, 360);
         const equipmentBackground = this.add.rectangle(0, 0, 200, 400, 0x333333);
         equipmentBackground.setAlpha(0.8);
@@ -257,6 +258,15 @@ class MainScene extends Phaser.Scene {
         });
         modalText.setOrigin(0.5);
         modalContainer.add(modalText);
+
+        socket.emit('getGold', this.characterId);
+        socket.on('gold', (gold) => {
+            console.log('Or du joueur:', gold);
+            this.playerGold = gold.amount;
+            if (this.isInventoryActive) {
+                this.displayGold();
+            };
+        });
     
         socket.emit('getInventory', this.characterId);
         socket.on('inventory', (inventory) => {
@@ -264,6 +274,26 @@ class MainScene extends Phaser.Scene {
             this.playerInventory = inventory;
             this.displayInventoryItems(inventorySlots, inventory, modalContainer, modalText);
         });
+
+        this.displayGold = () => {
+            // Supprimez l'ancien texte d'or s'il existe
+            if (this.goldText) {
+                this.goldText.destroy();
+            }
+            if (this.goldIcon) {
+                this.goldIcon.destroy();
+            }
+            this.goldIcon = this.add.image(-205, 180, 'gold_pouch');
+            this.goldIcon.setScale(0.5); // Ajustez l'échelle selon la taille de votre image
+            inventoryContainer.add(this.goldIcon);
+            // Créez le nouveau texte d'or
+            this.goldText = this.add.text(-190, 170, `Or: ${this.playerGold}`, {
+                fontFamily: 'Arial',
+                fontSize: 20,
+                color: '#ffffff'
+            }); // Aligne le texte en bas à droite
+            inventoryContainer.add(this.goldText);
+        }
     
         this.displayInventoryItems = (slots, items, modalContainer, modalText) => {
             let characterItems = items.items;
@@ -296,6 +326,7 @@ class MainScene extends Phaser.Scene {
             equipmentContainer.setVisible(this.isInventoryActive);
             if (this.isInventoryActive) {
                 this.displayInventoryItems(inventorySlots, this.playerInventory, modalContainer, modalText);
+                this.displayGold(); // Ajoutez cette ligne
             } else {
                 inventoryContainer.list.forEach(child => {
                     if (child instanceof Phaser.GameObjects.Image || 
