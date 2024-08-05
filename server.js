@@ -139,6 +139,17 @@ io.on('connection', (socket) => {
       }
     });
 
+    socket.on('getGold', async (characterId) => {
+      try {
+        const gold = await db.collection('golds').findOne({ playerId: characterId });
+        socket.emit('gold', gold);
+        console.log('Or récupéré avec succès pour le joueur :', characterId);
+      } catch (err) {
+        console.error('Erreur lors de la récupération de l\'or :', err);
+        socket.emit('errorMessage', 'Erreur lors de la récupération de l\'or');
+      }
+    });
+
     socket.on('getInventory', async (characterId) => {
       try {
         const inventory = await db.collection('inventories').findOne({ playerId: characterId });
@@ -182,6 +193,16 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Erreur lors de l\'ajout des objets de départ :', err);
       socket.emit('errorMessage', 'Erreur lors de l\'ajout des objets de départ');
+    }
+  });
+
+  socket.on('giveStartingGold', async (characterId) => {
+    try {
+      await db.collection('golds').insertOne({ playerId: characterId, amount: 100 });
+      socket.emit('startingGoldGiven', 100);
+    } catch (err) {
+      console.error('Erreur lors de l\'ajout de l\'or de départ :', err);
+      socket.emit('errorMessage', 'Erreur lors de l\'ajout de l\'or de départ');
     }
   });
 
