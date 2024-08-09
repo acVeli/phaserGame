@@ -99,6 +99,7 @@ io.on('connection', (socket) => {
           name: player.name,
           level: player.level
       }));
+      console.log('requestAllPlayers', allPlayers);
       socket.emit('allPlayers', allPlayers);
     });
 
@@ -117,6 +118,9 @@ io.on('connection', (socket) => {
         
         //envoyer les nouvelles données du joueur à tous les clients
         socket.broadcast.emit('playerMoved', { id: socket.id, ...playerData });
+
+        //mettre à jour les données du joueur dans le serveur
+        players.set(socket.id, { ...players.get(socket.id), ...playerData });
         
         //mettre à jour la position du joueur dans la base de données
         db.collection('playerPositions').updateOne(
