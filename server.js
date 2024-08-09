@@ -103,6 +103,15 @@ io.on('connection', (socket) => {
       socket.emit('allPlayers', allPlayers);
     });
 
+    socket.on('getLastMessages', async () => {
+      try {
+          const messages = await db.collection('messages').find().sort({ timestamp: -1 }).limit(10).toArray();
+          socket.emit('lastMessages', messages.reverse());
+      } catch (err) {
+          console.error('Erreur lors de la récupération des derniers messages :', err);
+      }
+    });
+
     socket.on('disconnect', () => {
         numberOfPlayers--;
         console.log(`Un joueur s'est déconnecté ${socket.id}, nombre de joueurs: ${numberOfPlayers}`);

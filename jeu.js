@@ -533,6 +533,14 @@ class MainScene extends Phaser.Scene {
 
         socket.emit('requestAllPlayers');
 
+        socket.emit('getLastMessages');
+        socket.on('lastMessages', (messages) => {
+            console.log('Derniers messages:', messages);
+            messages.forEach(message => {
+                this.addChatMessage(message.message, message.playerName);
+            });
+        });
+
         socket.on('allPlayers', (players) => {
             players.forEach(playerData => {
                 if (playerData.id !== this.characterId) {
