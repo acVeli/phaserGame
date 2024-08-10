@@ -176,6 +176,15 @@ io.on('connection', (socket) => {
 
     socket.on('createCharacter', async (characterData) => {
       try {
+        const regex = /^[a-zA-Z0-9]{1,16}$/;
+        const validName = regex.test(characterData.name);
+        if (!characterData.name) {
+          socket.emit('errorMessage', 'Le nom du personnage est requis');
+          return;
+        }else if(characterData.name.length > 16 && !validName){
+          socket.emit('errorMessage', 'Le nom du personnage doit contenir moins de 16 caractères et ne doit pas contenir de caractères spéciaux');
+          return;
+        }
         const character = await addCharacter(characterData);
         socket.emit('registrationSuccess', character);
         console.log('Nouveau personnage créé avec succès :', characterData.name);
@@ -242,7 +251,7 @@ io.on('connection', (socket) => {
   socket.on('checkNameForLogin', async (name) => {
     try {
       const character = await getCharacter(name);
-      socket.emit('nameCheckedForLogin', !!character);
+      socket.emit('nameCheckedForLogin', character);
     } catch (err) {
       console.error('Erreur lors de la vérification du nom :', err);
       socket.emit('errorMessage', 'Erreur lors de la vérification du nom');

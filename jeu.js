@@ -3,6 +3,9 @@
 class LoginScene extends Phaser.Scene {
     constructor() {
         super({ key: 'LoginScene' });
+        this.errorMessages = [];
+        this.createButton = null;
+        this.currentName = '';
     }
 
     create() {
@@ -13,66 +16,111 @@ class LoginScene extends Phaser.Scene {
             placeholder: 'Entrez votre nom',
             style: 'width: 200px; padding: 10px;'
         }).setOrigin(0.5);
+        nameInput.setName('nameInput');
 
         const playButton = this.add.text(640, 400, 'Jouer', { fontSize: '24px', fill: '#0f0' })
             .setOrigin(0.5)
             .setInteractive()
+            .on('pointerdown', () => this.handlePlayButton(nameInput.node.value));
+
+        this.setupSocketListeners();
+    }
+
+    setupSocketListeners() {
+        socket.off('nameCheckedForLogin');
+        socket.off('nameCheckedForRegister');
+        socket.off('registrationSuccess');
+        socket.off('character');
+
+        socket.on('nameCheckedForLogin', (character) => this.handleLoginCheck(character));
+        socket.on('nameCheckedForRegister', (isNameValid) => this.handleRegisterCheck(isNameValid));
+        socket.on('registrationSuccess', (character) => this.handleRegistrationSuccess(character));
+        socket.on('character', (character) => this.handleCharacterReceived(character));
+    }
+
+    handlePlayButton(name) {
+        this.clearErrorMessages();
+        if (name.trim() === '') {
+            this.displayErrorMessage('Veuillez entrer un nom', 500);
+            return;
+        }
+        this.currentName = name; // Stockez le nom actuel
+        socket.emit('checkNameForLogin', name);
+    }
+
+    handleLoginCheck(character) {
+        if (character) {
+            socket.emit('getCharacter', character.name || character);
+        } else {
+            this.displayMultipleErrorMessages([
+                'Personnage non trouvé',
+                'Si vous n\'avez pas de personnage, veuillez en créer un.'
+            ]);
+            this.displayCreateButton();
+        }
+    }
+
+    handleRegisterCheck(isNameValid) {
+        if (isNameValid) {
+            socket.emit('createCharacter', { name: this.currentName });
+        } else {
+            this.displayMultipleErrorMessages([
+                'Le nom de personnage est déjà utilisé ou invalide',
+                'Entrez un autre nom et veuillez ne pas utiliser d\'espace ou de caractères spéciaux.',
+                'Le nom doit être composé de 1 à 16 caractères alphanumériques.'
+            ]);
+        }
+    }
+
+    handleRegistrationSuccess(character) {
+        if (!character) {
+            this.displayErrorMessage('Erreur lors de la création du personnage', 500);
+            return;
+        }
+        socket.emit('giveStartingItems', character.insertedId);
+        socket.emit('giveStartingGold', character.insertedId);
+        console.log('Personnage créé:', character);
+        this.scene.start('MainScene', { playerName: this.currentName, characterId: character.insertedId, level: 1, registered: true });
+    }
+
+    handleCharacterReceived(character) {
+        if (character) {
+            this.scene.start('MainScene', { playerName: character.name, characterId: character._id, level: character.level, loggedIn: true });
+            console.log('Personnage trouvé', character);
+        }
+    }
+
+    clearErrorMessages() {
+        this.errorMessages.forEach(message => message.destroy());
+        this.errorMessages = [];
+        if (this.createButton) {
+            this.createButton.destroy();
+            this.createButton = null;
+        }
+    }
+
+    displayErrorMessage(message, y) {
+        const errorText = this.add.text(640, y, message, { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
+        this.errorMessages.push(errorText);
+    }
+
+    displayMultipleErrorMessages(messages) {
+        this.clearErrorMessages();
+        let y = 500;
+        messages.forEach(message => {
+            this.displayErrorMessage(message, y);
+            y += 50;
+        });
+    }
+
+    displayCreateButton() {
+        this.createButton = this.add.text(640, 600, 'Créer un personnage', { fontSize: '24px', fill: '#0f0' })
+            .setOrigin(0.5)
+            .setInteractive()
             .on('pointerdown', () => {
-                const name = nameInput.node.value;
-                socket.emit('checkNameForLogin', name);
-                socket.on('nameCheckedForLogin', (isNameValid) => {
-                    if (isNameValid) {
-                        this.loginCharacter(name);
-                    } else {
-                        this.add.text(640, 500, 'Personnage non trouvé', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-                        this.add.text('Si vous n\'avez pas de personnage, veuillez en créer un.', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-                        const createButton = this.add.text(640, 550, 'Créer un personnage', { fontSize: '24px', fill: '#0f0' })
-                            .setOrigin(0.5)
-                            .setInteractive()
-                            .on('pointerdown', () => {
-                                this.createCharacter(name);
-                            });
-                    }
-                });
+                this.clearErrorMessages();
+                socket.emit('checkNameForRegister', this.currentName);
             });
-    }
-
-    loginCharacter(name) {
-        socket.emit('getCharacter', name);
-        socket.on('character', (character) => {
-            if (character) {
-                this.scene.start('MainScene', { playerName: name, characterId: character._id, level: character.level, loggedIn: true });
-                console.log('Personnage trouvé', character);
-            } 
-        });
-    }
-
-    createCharacter(name) {
-
-        socket.emit('checkNameForRegister', name);
-
-        socket.on('nameCheckedForRegister', (isNameValid) => {
-
-            if(isNameValid) {
-                socket.emit('createCharacter', { name: name });
-                socket.on('registrationSuccess', (character) => {
-                    if (!character) {
-                        console.error('Erreur lors de la création du personnage');
-                        this.add.text(640, 500, 'Erreur lors de la création du personnage', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-                        return;
-                    }
-                    socket.emit('giveStartingItems', character.insertedId);
-                    socket.emit('giveStartingGold', character.insertedId);
-                    console.log('Personnage créé:', character);
-                    this.scene.start('MainScene', { playerName: name, characterId: character.insertedId, level: 1, registered: true });
-                });
-            } else {
-                console.error('Le nom de personnage est déjà utilisé ou invalide');
-                this.add.text(640, 500, 'Le nom de personnage est déjà utilisé ou invalide', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-                this.add.text(640, 550, 'Entrez un autre nom et veuillez ne pas utiliser d\'espace ou de caractères spéciaux.', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-                this.add.text(640, 600, 'Le nom doit être composé de 1 à 16 caractères alphanumériques.', { fontSize: '24px', fill: '#f00' }).setOrigin(0.5);
-            }
-        });
     }
 }
 
