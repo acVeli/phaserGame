@@ -29,12 +29,10 @@ class LoginScene extends Phaser.Scene {
     setupSocketListeners() {
         socket.off('nameCheckedForLogin');
         socket.off('nameCheckedForRegister');
-        socket.off('registrationSuccess');
         socket.off('character');
 
         socket.on('nameCheckedForLogin', (character) => this.handleLoginCheck(character));
         socket.on('nameCheckedForRegister', (isNameValid) => this.handleRegisterCheck(isNameValid));
-        socket.on('registrationSuccess', (character) => this.handleRegistrationSuccess(character));
         socket.on('character', (character) => this.handleCharacterReceived(character));
     }
 
@@ -72,20 +70,9 @@ class LoginScene extends Phaser.Scene {
         }
     }
 
-    handleRegistrationSuccess(character) {
-        if (!character) {
-            this.displayErrorMessage('Erreur lors de la création du personnage', 500);
-            return;
-        }
-        socket.emit('giveStartingItems', character.insertedId);
-        socket.emit('giveStartingGold', character.insertedId);
-        console.log('Personnage créé:', character);
-        this.scene.start('MainScene', { playerName: this.currentName, characterId: character.insertedId, level: 1, registered: true });
-    }
-
     handleCharacterReceived(character) {
         if (character) {
-            this.scene.start('MainScene', { playerName: character.name, characterId: character._id, level: character.level, loggedIn: true });
+            this.scene.start('MainScene', { playerName: character.name, characterId: character._id, race: character.race, level: character.level, loggedIn: true });
             console.log('Personnage trouvé', character);
         }
     }
@@ -155,6 +142,8 @@ class RaceSelectionScene extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => this.confirmSelection())
             .setVisible(false);
+
+        this.setupSocketListeners();
     }
 
     selectRace(race) {
@@ -164,6 +153,7 @@ class RaceSelectionScene extends Phaser.Scene {
 
     confirmSelection() {
         if (this.selectedRace) {
+            console.log(this.selectedRace);
             socket.emit('createCharacter', { name: this.playerName, race: this.selectedRace });
         }
     }
@@ -174,17 +164,17 @@ class RaceSelectionScene extends Phaser.Scene {
 
     handleRegistrationSuccess(character) {
         if (!character) {
+            console.log("erreur");
             // Gérer l'erreur
             return;
         }
-        socket.emit('giveStartingItems', character.insertedId);
-        socket.emit('giveStartingGold', character.insertedId);
-        console.log('Personnage créé:', character);
+        socket.emit('giveStartingItems', character._id);
+        socket.emit('giveStartingGold', character._id);
         this.scene.start('MainScene', { 
             playerName: this.playerName, 
-            characterId: character.insertedId, 
+            characterId: character._id, 
+            race: character.raceId,
             level: 1, 
-            race: this.selectedRace,
             registered: true 
         });
     }
@@ -202,6 +192,7 @@ class MainScene extends Phaser.Scene {
         this.playerName = data.playerName;
         this.characterId = data.characterId;
         this.player = null;
+        this.race = data.race;
         this.targetX = 0;
         this.targetY = 0;
         this.moving = false;
@@ -270,6 +261,7 @@ class MainScene extends Phaser.Scene {
     }
 
     initializePlayer(x, y) {
+        console.log("ma race", this.race);
         this.player = this.physics.add.sprite(x, y, 'dude');
         this.player.x = x;
         this.player.y = y;
@@ -281,6 +273,7 @@ class MainScene extends Phaser.Scene {
             x: this.player.x,
             y: this.player.y,
             name: this.playerName,
+            race: this.race,
             level: this.playerLevel
         });
         this.initializeGameElements(this.player);
@@ -667,11 +660,11 @@ class MainScene extends Phaser.Scene {
         console.log('Rejoindre le jeu');
         if(this.registered) {
             console.log(playerData);
-            socket.emit('Registered', this.characterId, this.playerName, this.player.x, this.player.y, this.playerLevel);
+            socket.emit('Registered', this.characterId, this.playerName, this.player.x, this.player.y, this.race, this.playerLevel);
             console.log('Enregistrement réussi, rejoindre le jeu');
         } else if(this.loggedIn) {
             console.log(playerData);
-            socket.emit('LoggedIn', this.characterId, this.playerName, this.player.x, this.player.y, this.playerLevel);
+            socket.emit('LoggedIn', this.characterId, this.playerName, this.player.x, this.player.y, this.race, this.playerLevel);
             console.log('Connexion réussie, rejoindre le jeu');
         }
         console.log(this.playerName + ' a rejoint le jeu');

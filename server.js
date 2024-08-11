@@ -150,14 +150,14 @@ io.on('connection', (socket) => {
       }
     });
 
-    socket.on('LoggedIn', (playerId, playerName, playerX, playerY, playerLevel ) => {
+    socket.on('LoggedIn', (playerId, playerName, playerX, playerY, playerRace, playerLevel ) => {
       console.log('LoggedIn', playerId, playerName, playerX, playerY);
-      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
+      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, race: playerRace, level: playerLevel });
     });
 
-    socket.on('Registered', (playerId, playerName, playerX, playerY, playerLevel) => {
-      console.log('Registered', playerId, playerName, playerX, playerY);
-      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
+    socket.on('Registered', (playerId, playerName, playerX, playerY, playerRace, playerLevel) => {
+      console.log('Registered', playerId, playerName, playerX, playerY, playerRace, playerLevel);
+      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, race: playerRace, level: playerLevel });
     });
 
     socket.on('requestAllPlayers', () => {
@@ -166,6 +166,7 @@ io.on('connection', (socket) => {
           x: player.x,
           y: player.y,
           name: player.name,
+          race: player.race,
           level: player.level
       }));
       console.log('requestAllPlayers', allPlayers);
@@ -247,11 +248,17 @@ io.on('connection', (socket) => {
       try {
         const regex = /^[a-zA-Z0-9]{1,16}$/;
         const validName = regex.test(characterData.name);
+        //const race doit donner l'id de la race dans la collection raceGame en fonction du name
+        const race = await db.collection('races').findOne({ name: characterData.race });
+        characterData.race = race.id;
         if (!characterData.name) {
           socket.emit('errorMessage', 'Le nom du personnage est requis');
           return;
         }else if(characterData.name.length > 16 && !validName){
           socket.emit('errorMessage', 'Le nom du personnage doit contenir moins de 16 caractères et ne doit pas contenir de caractères spéciaux');
+          return;
+        }else if (!characterData.race) {
+          socket.emit('errorMessage', 'La race du personnage est requise');
           return;
         }
         const character = await addCharacter(characterData);
@@ -331,13 +338,19 @@ io.on('connection', (socket) => {
 
 async function addCharacter(characterData) {
   try {
-    const result = await db.collection('players').insertOne({
+    const newCharacter = {
       name: characterData.name,
-      level: 1,  // On commence au niveau 1 par défaut
+      raceId: characterData.race,
+      level: 1, // On commence au niveau 1 par défaut
       createdAt: new Date()
-    });
+    };
+    
+    const result = await db.collection('players').insertOne(newCharacter);
+    
     console.log(`Nouveau personnage ajouté avec l'ID : ${result.insertedId} et le nom : ${characterData.name}`);
-    return result;
+    
+    // Retourner l'objet complet du personnage, y compris l'ID généré
+    return { ...newCharacter, _id: result.insertedId };
   } catch (err) {
     console.error('Erreur lors de l\'ajout du personnage :', err);
     throw err;
