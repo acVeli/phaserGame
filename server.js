@@ -41,9 +41,48 @@ app.use(bodyParser.json());
 let numberOfPlayers = 0;
 
 const gameItems = [
-  { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description : 'Une épée en bois basique' },
-  { id: 2, name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume', description : 'Une potion de soin basique' },
+  { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description : 'Une épée en bois basique'},
+  { id: 2, name: 'Parchemin premium de tirage', type: 'draw', draw: 1, onclick: null, description : 'Un parchemin de tirage permettant de recruter un équipier de plus pour livrer bataille sur Terzawa'},
 ];
+
+const gameRaces = [
+  { id: 1, name: 'Teros'},
+  { id: 2, name: 'Zaabo' },
+  { id: 3, name: 'Wabocel' }
+];
+
+const gameRacesBaseStats = [
+  //Teros
+  { id: 1, raceId: 1, statId: 1, value: 10 }, //Force
+  { id: 2, raceId: 1, statId: 2, value: 5 }, //Agilité
+  { id: 3, raceId: 1, statId: 3, value: 5 }, //Spiritualité
+  { id: 4, raceId: 1, statId: 4, value: 8 }, //Endurance
+  { id: 5, raceId: 1, statId: 5, value: 5 }, //Vitesse
+  //total 33
+  //Zaabo
+  { id: 6, raceId: 2, statId: 1, value: 5 }, //Force
+  { id: 7, raceId: 2, statId: 2, value: 8 }, //Agilité
+  { id: 8, raceId: 2, statId: 3, value: 8 }, //Spiritualité
+  { id: 9, raceId: 2, statId: 4, value: 5 }, //Endurance
+  { id: 10, raceId: 2, statId: 5, value: 7 }, //Vitesse
+  //total 33
+  //Wabocel
+  { id: 11, raceId: 3, statId: 1, value: 8 }, //Force
+  { id: 12, raceId: 3, statId: 2, value: 4 }, //Agilité
+  { id: 13, raceId: 3, statId: 3, value: 8 },  //Spiritualité
+  { id: 14, raceId: 3, statId: 4, value: 8 },  //Endurance
+  { id: 15, raceId: 3, statId: 5, value: 5 }, //Vitesse
+  //total 33
+];
+
+const gameCharacterStats = [
+  { id: 1, name: 'Force' }, // augmente les degats physiques et l'armure physique
+  { id: 2, name: 'Agilité'}, // augmente le vol de vie et la chance de coup critique
+  { id: 3, name: 'Spiritualité' }, // augmente les dégats magiques et la résistance magique
+  { id: 4, name: 'Endurance' }, // augmente les points de vie et l'apport d'hp par les soins
+  { id: 5, name: 'Vitesse' }, // augmente la rapidité de coup et l'augmentation de la jauge de compétence
+];
+
 
 async function insertGameItems(gameItems) {
   const items = await db.collection('gameItems').find().toArray();
@@ -52,6 +91,36 @@ async function insertGameItems(gameItems) {
   } else {
     await db.collection('gameItems').deleteMany({});
     await db.collection('gameItems').insertMany(gameItems);
+  }
+}
+
+async function insertRaces(gameRaces){
+  const races = await db.collection('races').find().toArray();
+  if(races.length === 0){
+    await db.collection('races').insertMany(gameRaces);
+  }else{
+    await db.collection('races').deleteMany({});
+    await db.collection('races').insertMany(gameRaces);
+  }
+}
+
+async function insertRacesBaseStats(gameRacesBaseStats){
+  const baseStats = await db.collection('racesBaseStats').find().toArray();
+  if(baseStats.length === 0){
+    await db.collection('racesBaseStats').insertMany(gameRacesBaseStats);
+  }else{
+    await db.collection('racesBaseStats').deleteMany({});
+    await db.collection('racesBaseStats').insertMany(gameRacesBaseStats);
+  }
+}
+
+async function insertCharacterStats(gameCharacterStats){
+  const stats = await db.collection('gameStats').find().toArray();
+  if(stats.length === 0){
+    await db.collection('gameStats').insertMany(gameCharacterStats);
+  }else{
+    await db.collection('gameStats').deleteMany({});
+    await db.collection('gameStats').insertMany(gameCharacterStats);
   }
 }
 
@@ -290,7 +359,9 @@ async function startServer() {
   try {
     ({ client: mongoClient, db } = await connectToMongo());
     await insertGameItems(gameItems);
-    
+    await insertRaces(gameRaces);
+    await insertRacesBaseStats(gameRacesBaseStats);
+    await insertCharacterStats(gameCharacterStats);
     http.listen(PORT, () => {
       console.log(`Serveur en écoute sur le port ${PORT}`);
     });

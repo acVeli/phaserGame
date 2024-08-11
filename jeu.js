@@ -62,7 +62,7 @@ class LoginScene extends Phaser.Scene {
 
     handleRegisterCheck(isNameValid) {
         if (isNameValid) {
-            socket.emit('createCharacter', { name: this.currentName });
+            this.scene.start('RaceSelectionScene', { playerName: this.currentName });
         } else {
             this.displayMultipleErrorMessages([
                 'Le nom de personnage est déjà utilisé ou invalide',
@@ -124,6 +124,71 @@ class LoginScene extends Phaser.Scene {
     }
 }
 
+
+//RACESELECTIONSCENE
+class RaceSelectionScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'RaceSelectionScene' });
+        this.selectedRace = null;
+    }
+
+    init(data) {
+        this.playerName = data.playerName;
+    }
+
+    create() {
+        this.add.text(640, 100, 'Choisissez votre race', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+
+        const races = ['Teros', 'Zaabo', 'Wabocel']; // Ajoutez ou modifiez les races selon vos besoins
+        let yPosition = 200;
+
+        races.forEach(race => {
+            const raceButton = this.add.text(640, yPosition, race, { fontSize: '24px', fill: '#fff' })
+                .setOrigin(0.5)
+                .setInteractive()
+                .on('pointerdown', () => this.selectRace(race));
+            yPosition += 60;
+        });
+
+        this.confirmButton = this.add.text(640, 500, 'Confirmer', { fontSize: '24px', fill: '#0f0' })
+            .setOrigin(0.5)
+            .setInteractive()
+            .on('pointerdown', () => this.confirmSelection())
+            .setVisible(false);
+    }
+
+    selectRace(race) {
+        this.selectedRace = race;
+        this.confirmButton.setVisible(true);
+    }
+
+    confirmSelection() {
+        if (this.selectedRace) {
+            socket.emit('createCharacter', { name: this.playerName, race: this.selectedRace });
+        }
+    }
+
+    setupSocketListeners() {
+        socket.on('registrationSuccess', (character) => this.handleRegistrationSuccess(character));
+    }
+
+    handleRegistrationSuccess(character) {
+        if (!character) {
+            // Gérer l'erreur
+            return;
+        }
+        socket.emit('giveStartingItems', character.insertedId);
+        socket.emit('giveStartingGold', character.insertedId);
+        console.log('Personnage créé:', character);
+        this.scene.start('MainScene', { 
+            playerName: this.playerName, 
+            characterId: character.insertedId, 
+            level: 1, 
+            race: this.selectedRace,
+            registered: true 
+        });
+    }
+}
 
 //MAINSCENE
 
@@ -756,7 +821,7 @@ const config = {
             debug: true
         }
     },
-    scene: [LoginScene, MainScene]
+    scene: [LoginScene, RaceSelectionScene, MainScene]
 };
 
 const game = new Phaser.Game(config);
