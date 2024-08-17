@@ -72,7 +72,7 @@ class LoginScene extends Phaser.Scene {
 
     handleCharacterReceived(character) {
         if (character) {
-            this.scene.start('MainScene', { playerName: character.name, characterId: character._id, race: character.race, level: character.level, loggedIn: true });
+            this.scene.start('MainScene', { playerName: character.name, characterId: character._id, race: character.raceId, level: character.level, loggedIn: true });
             console.log('Personnage trouvé', character);
         }
     }

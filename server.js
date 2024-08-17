@@ -284,7 +284,7 @@ io.on('connection', (socket) => {
     try {
       const startingItems = [
         { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description: 'Une épée en bois basique' },
-        { id: 2,name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume', description: 'Une potion de soin basique' },
+        { id: 2, name: 'Parchemin premium de tirage', type: 'draw', draw: 1, onclick: null, description : 'Un parchemin de tirage permettant de recruter un équipier de plus pour livrer bataille sur Terzawa'},
       ];
       await db.collection('inventories').insertOne({ playerId: characterId, items: startingItems });
       socket.emit('startingItemsGiven', startingItems);
