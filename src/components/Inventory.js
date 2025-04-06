@@ -17,6 +17,7 @@ class Inventory {
         this.setupEventListeners();
         this.loadInventory();
         this.containers.main.setVisible(false);
+        this.containers.equipment.setVisible(false);
     }
 
     createContainers() {
@@ -51,7 +52,13 @@ class Inventory {
             color: '#ffffff'
         });
         closeButton.setInteractive();
-        closeButton.on('pointerdown', () => this.toggle());
+        closeButton.on('pointerdown', () => {
+            // Empêcher la propagation en retournant false
+            return false;
+        });
+        closeButton.on('pointerup', () => {
+            this.toggle();
+        });
         this.containers.main.add(closeButton);
 
         // Configuration des profondeurs
@@ -182,6 +189,9 @@ class Inventory {
         this.isActive = !this.isActive;
         this.containers.main.setVisible(this.isActive);
         this.containers.equipment.setVisible(this.isActive);
+        
+        // Informer la scène que l'inventaire est ouvert/fermé
+        this.scene.isInventoryActive = this.isActive;
         
         if (this.isActive) {
             this.loadInventory();

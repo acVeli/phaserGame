@@ -146,6 +146,18 @@ class LoginScene extends BaseScene {
             this.createButton = null;
         }
     }
+
+    handleLoginSuccess(character) {
+        console.log('Connexion réussie:', character);
+        this.scene.start('MainScene', {
+            playerName: character.name,
+            characterId: character._id,
+            level: character.level,
+            loggedIn: true
+        });
+        // Demander la liste des joueurs après la connexion
+        SocketService.socket.emit('requestAllPlayers');
+    }
 }
 
 export default LoginScene; 

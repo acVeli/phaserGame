@@ -1,12 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>PhaserGame</title>
-    <script src="phaser/phaser.min.js"></script>
-    <script src="socket.io/socket.io.js"></script>
+    <title>Terzawa</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000;
+        }
+        #game-container {
+            width: 1280px;
+            height: 720px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
-    <script src="jeu.js"></script>
+    <div id="game-container"></div>
+    <script src="dist/bundle.js"></script>
 </body>
 </html>

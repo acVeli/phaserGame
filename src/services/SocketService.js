@@ -2,17 +2,23 @@ import { SOCKET_CONFIG } from '../config/gameConfig';
 
 class SocketService {
     constructor() {
-        this.socket = io(`${SOCKET_CONFIG.url}:${SOCKET_CONFIG.port}`);
+        this.socket = io('http://localhost:3000'); // Port du serveur Node.js
         this.setupBaseListeners();
     }
 
     setupBaseListeners() {
-        this.socket.on("connect", () => {
-            console.log('Connecté au serveur');
+        this.socket.on('connect', () => {
+            console.log('Connecté au serveur Socket.io');
+            // Émettre la demande des joueurs une fois connecté
+            this.socket.emit('requestAllPlayers');
         });
 
-        this.socket.on("connect_error", (err) => {
-            console.log(`Erreur de connexion: ${err.message}`);
+        this.socket.on('disconnect', () => {
+            console.log('Déconnecté du serveur Socket.io');
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('Erreur de connexion Socket.io:', error);
         });
     }
 
@@ -27,11 +33,20 @@ class SocketService {
 
     // Méthodes de gestion du joueur
     updatePlayerPosition(playerData) {
+        console.log('Envoi de la position:', playerData);
         this.socket.emit('updatePlayer', playerData);
     }
 
     getPlayerPosition(characterId) {
         this.socket.emit('getPlayerPosition', characterId);
+    }
+
+    onPlayerPositionUpdate(callback) {
+        console.log('Configuration de l\'écouteur de position');
+        this.socket.on('playerPositionUpdate', (data) => {
+            console.log('Réception de la position:', data);
+            callback(data);
+        });
     }
 
     // Méthodes de gestion de l'inventaire
@@ -50,11 +65,19 @@ class SocketService {
 
     // Méthodes d'écoute des événements
     onPlayerJoined(callback) {
-        this.socket.on('playerJoined', callback);
+        console.log('Configuration de l\'écouteur de connexion');
+        this.socket.on('playerJoined', (data) => {
+            console.log('Nouveau joueur connecté:', data);
+            callback(data);
+        });
     }
 
     onPlayerLeft(callback) {
-        this.socket.on('playerLeft', callback);
+        console.log('Configuration de l\'écouteur de déconnexion');
+        this.socket.on('playerLeft', (data) => {
+            console.log('Joueur déconnecté:', data);
+            callback(data);
+        });
     }
 
     onChatMessage(callback) {
@@ -83,6 +106,11 @@ class SocketService {
 
     onCharacterReceived(callback) {
         this.socket.on('character', callback);
+    }
+
+    requestAllPlayers() {
+        console.log('Demande de la liste des joueurs');
+        this.socket.emit('requestAllPlayers');
     }
 
     // Méthodes utilitaires

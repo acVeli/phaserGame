@@ -58,58 +58,92 @@ async function insertGameItems(gameItems) {
 const players = new Map();
 
 io.on('connection', (socket) => {
-  
-  numberOfPlayers++;
-  socket.on('addPlayerToPlayerList', (playerData) => {
-    players.set(socket.id, { ...playerData, socketId: socket.id });
-    console.log('Joueur ajouté à la liste des joueurs :', playerData);
-  });
+    console.log('Un client s\'est connecté');
+   
+    numberOfPlayers++;
+    socket.on('addPlayerToPlayerList', (playerData) => {
+        players.set(socket.id, { ...playerData, socketId: socket.id });
+        console.log('Joueur ajouté à la liste des joueurs :', playerData);
+    });
 
     console.log(`Un joueur s'est connecté, nombre de joueurs: ${numberOfPlayers}`);
 
     socket.on('chat message', async (msg, playerName) => {
-      console.log('Chat de', playerName, ':', msg);
-      try {
-          await db.collection('messages').insertOne({
-              message: msg,
-              playerName: playerName,
-              timestamp: new Date()
-          });
-          io.emit('chat message', msg, playerName); // Envoie le message à tous les clients connectés
-      } catch (err) {
-          console.error('Erreur lors de l\'enregistrement du message:', err);
-      }
+        try {
+            const message = {
+                playerName: playerName,
+                message: msg,
+                timestamp: new Date()
+            };
+            await db.collection('chatMessages').insertOne(message);
+            io.emit('chat message', message);
+        } catch (error) {
+            console.error('Erreur lors de l\'enregistrement du message:', error);
+        }
     });
 
-    socket.on('LoggedIn', (playerId, playerName, playerX, playerY, playerLevel ) => {
-      console.log('LoggedIn', playerId, playerName, playerX, playerY);
-      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
+    socket.on('LoggedIn', (playerId, playerName, playerX, playerY, playerLevel) => {
+        console.log('LoggedIn', playerId, playerName, playerX, playerY);
+        players.set(playerId, {
+            id: playerId,
+            name: playerName,
+            x: playerX,
+            y: playerY,
+            level: playerLevel,
+            socketId: socket.id
+        });
+        socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
     });
 
     socket.on('Registered', (playerId, playerName, playerX, playerY, playerLevel) => {
-      console.log('Registered', playerId, playerName, playerX, playerY);
-      socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
+        console.log('Registered', playerId, playerName, playerX, playerY);
+        players.set(playerId, {
+            id: playerId,
+            name: playerName,
+            x: playerX,
+            y: playerY,
+            level: playerLevel,
+            socketId: socket.id
+        });
+        socket.broadcast.emit('playerJoined', { id: playerId, name: playerName, x: playerX, y: playerY, level: playerLevel });
     });
 
     socket.on('requestAllPlayers', () => {
-      const allPlayers = Array.from(players.values()).map(player => ({
-          id: player.id,
-          x: player.x,
-          y: player.y,
-          name: player.name,
-          level: player.level
-      }));
-      console.log('requestAllPlayers', allPlayers);
-      socket.emit('allPlayers', allPlayers);
+        // Filtrer pour exclure le joueur actuel
+        const allPlayers = Array.from(players.values())
+            .filter(player => player.socketId !== socket.id)
+            .map(player => ({
+                id: player.id,
+                x: player.x,
+                y: player.y,
+                name: player.name,
+                level: player.level
+            }));
+        console.log('requestAllPlayers - Envoi des autres joueurs:', allPlayers);
+        socket.emit('allPlayers', allPlayers);
     });
 
     socket.on('getLastMessages', async () => {
-      try {
-          const messages = await db.collection('messages').find().sort({ timestamp: -1 }).limit(10).toArray();
-          socket.emit('lastMessages', messages.reverse());
-      } catch (err) {
-          console.error('Erreur lors de la récupération des derniers messages :', err);
-      }
+        try {
+            const messages = await db.collection('chatMessages')
+                .find()
+                .sort({ timestamp: -1 })
+                .limit(50)
+                .toArray();
+            socket.emit('lastMessages', messages.reverse());
+        } catch (error) {
+            console.error('Erreur lors de la récupération des messages:', error);
+        }
+    });
+
+    socket.on('checkNameForRegister'  , async (name) => {
+        try {
+            const existingPlayer = await db.collection('characters').findOne({ name: name });
+            socket.emit('nameCheckedForRegister', !existingPlayer);
+        } catch (error) {
+            console.error('Erreur lors de la vérification du nom:', error);
+            socket.emit('nameCheckedForRegister', false);
+        }
     });
 
     socket.on('disconnect', () => {
@@ -122,142 +156,153 @@ io.on('connection', (socket) => {
             io.emit('playerLeft', characterId);
         }
     });
-  
+   
     socket.on('updatePlayer', (playerData) => {
-        
-        //envoyer les nouvelles données du joueur à tous les clients
-        socket.broadcast.emit('playerMoved', { id: socket.id, ...playerData });
+        // Mettre à jour la position du joueur dans la liste des joueurs en ligne
+        if (players.has(playerData.id)) {
+            const player = players.get(playerData.id);
+            
+            // Si nous avons des points de départ et d'arrivée
+            if (playerData.startX !== undefined && playerData.startY !== undefined) {
+                players.set(playerData.id, {
+                    ...player,
+                    x: playerData.targetX,
+                    y: playerData.targetY,
+                    startX: playerData.startX,
+                    startY: playerData.startY,
+                    targetX: playerData.targetX,
+                    targetY: playerData.targetY
+                });
+            } else {
+                // Fallback pour les anciennes mises à jour de position
+                players.set(playerData.id, {
+                    ...player,
+                    x: playerData.x,
+                    y: playerData.y
+                });
+            }
+        }
 
-        //mettre à jour les données du joueur dans le serveur
-        players.set(socket.id, { ...players.get(socket.id), ...playerData });
-        
-        //mettre à jour la position du joueur dans la base de données
+        // Envoyer les nouvelles données du joueur à tous les clients
+        socket.broadcast.emit('playerPositionUpdate', playerData);
+
+        // Mettre à jour la position du joueur dans la base de données
         db.collection('playerPositions').updateOne(
             { playerId: playerData.id },
-            { $set: { playerId: playerData.id, x: playerData.x, y: playerData.y } },
+            { $set: { 
+                playerId: playerData.id, 
+                x: playerData.targetX || playerData.x, 
+                y: playerData.targetY || playerData.y 
+            }},
             { upsert: true }
         );
     });
 
-    socket.on('checkNameForRegister'  , async (name) => {
-      // Vérifier si le nom est déjà utilisé
-      const character = await getCharacter(name);
-      // Vérifier si le nom rentre dans le regex ^[a-zA-Z0-9]{1,16}$
-      const regex = /^[a-zA-Z0-9]{1,16}$/;
-      const validName = regex.test(name);
-      if(!character && validName) {
-        socket.emit('nameCheckedForRegister', true);
-      } else {
-        socket.emit('nameCheckedForRegister', false);
-      }
+    socket.on('getCharacter', async (name) => {
+        try {
+            const character = await getCharacter(name);
+            socket.emit('character', character);
+        } catch (err) {
+            console.error('Erreur lors de la récupération du personnage :', err);
+            socket.emit('errorMessage', 'Erreur lors de la récupération du personnage');
+        }
     });
 
-    socket.on('getGold', async (characterId) => {
-      try {
-        const gold = await db.collection('golds').findOne({ playerId: characterId });
-        socket.emit('gold', gold);
-        console.log('Or récupéré avec succès pour le joueur :', characterId);
-      } catch (err) {
-        console.error('Erreur lors de la récupération de l\'or :', err);
-        socket.emit('errorMessage', 'Erreur lors de la récupération de l\'or');
-      }
-    });
-
-    socket.on('getInventory', async (characterId) => {
-      try {
-        const inventory = await db.collection('inventories').findOne({ playerId: characterId });
-        socket.emit('inventory', inventory);
-        console.log('Inventaire récupéré avec succès pour le joueur :', characterId);
-      } catch (err) {
-        console.error('Erreur lors de la récupération de l\'inventaire :', err);
-        socket.emit('errorMessage', 'Erreur lors de la récupération de l\'inventaire');
-      }
+    socket.on('checkNameForLogin', async (name) => {
+        try {
+            const character = await getCharacter(name);
+            socket.emit('nameCheckedForLogin', character);
+        } catch (err) {
+            console.error('Erreur lors de la vérification du nom :', err);
+            socket.emit('errorMessage', 'Erreur lors de la vérification du nom');
+        }
     });
 
     socket.on('createCharacter', async (characterData) => {
-      try {
-        const regex = /^[a-zA-Z0-9]{1,16}$/;
-        const validName = regex.test(characterData.name);
-        if (!characterData.name) {
-          socket.emit('errorMessage', 'Le nom du personnage est requis');
-          return;
-        }else if(characterData.name.length > 16 && !validName){
-          socket.emit('errorMessage', 'Le nom du personnage doit contenir moins de 16 caractères et ne doit pas contenir de caractères spéciaux');
-          return;
+        try {
+            const regex = /^[a-zA-Z0-9]{1,16}$/;
+            const validName = regex.test(characterData.name);
+            if (!characterData.name) {
+                socket.emit('errorMessage', 'Le nom du personnage est requis');
+                return;
+            } else if (characterData.name.length > 16 && !validName) {
+                socket.emit('errorMessage', 'Le nom du personnage doit contenir moins de 16 caractères et ne doit pas contenir de caractères spéciaux');
+                return;
+            }
+            const character = await addCharacter(characterData);
+            socket.emit('registrationSuccess', character);
+            console.log('Nouveau personnage créé avec succès :', characterData.name);
+        } catch (err) {
+            console.error('Erreur lors de la création du personnage :', err);
+            socket.emit('errorMessage', 'Erreur lors de la création du personnage');
         }
-        const character = await addCharacter(characterData);
-        socket.emit('registrationSuccess', character);
-        console.log('Nouveau personnage créé avec succès :', characterData.name);
-      } catch (err) {
-        console.error('Erreur lors de la création du personnage :', err);
-        socket.emit('errorMessage', 'Erreur lors de la création du personnage');
-      }
-  });
+    });
 
-  socket.on('getGameItems', async () => {
-    try {
-      const gameItems = await db.collection('gameItems').find().toArray();
-      socket.emit('gameItems', gameItems);
-    } catch (err) {
-      console.error('Erreur lors de la récupération des objets de jeu :', err);
-      socket.emit('errorMessage', 'Erreur lors de la récupération des objets de jeu');
-    }
-  });
+    socket.on('getGold', async (characterId) => {
+        try {
+            const gold = await db.collection('golds').findOne({ playerId: characterId });
+            socket.emit('gold', gold);
+            console.log('Or récupéré avec succès pour le joueur :', characterId);
+        } catch (err) {
+            console.error('Erreur lors de la récupération de l\'or :', err);
+            socket.emit('errorMessage', 'Erreur lors de la récupération de l\'or');
+        }
+    });
 
-  socket.on('giveStartingItems', async (characterId) => {
-    try {
-      const startingItems = [
-        { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description: 'Une épée en bois basique' },
-        { id: 2,name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume', description: 'Une potion de soin basique' },
-      ];
-      await db.collection('inventories').insertOne({ playerId: characterId, items: startingItems });
-      socket.emit('startingItemsGiven', startingItems);
-    } catch (err) {
-      console.error('Erreur lors de l\'ajout des objets de départ :', err);
-      socket.emit('errorMessage', 'Erreur lors de l\'ajout des objets de départ');
-    }
-  });
+    socket.on('getInventory', async (characterId) => {
+        try {
+            const inventory = await db.collection('inventories').findOne({ playerId: characterId });
+            socket.emit('inventory', inventory);
+            console.log('Inventaire récupéré avec succès pour le joueur :', characterId);
+        } catch (err) {
+            console.error('Erreur lors de la récupération de l\'inventaire :', err);
+            socket.emit('errorMessage', 'Erreur lors de la récupération de l\'inventaire');
+        }
+    });
 
-  socket.on('giveStartingGold', async (characterId) => {
-    try {
-      await db.collection('golds').insertOne({ playerId: characterId, amount: 100 });
-      socket.emit('startingGoldGiven', 100);
-    } catch (err) {
-      console.error('Erreur lors de l\'ajout de l\'or de départ :', err);
-      socket.emit('errorMessage', 'Erreur lors de l\'ajout de l\'or de départ');
-    }
-  });
+    socket.on('getGameItems', async () => {
+        try {
+            const gameItems = await db.collection('gameItems').find().toArray();
+            socket.emit('gameItems', gameItems);
+        } catch (err) {
+            console.error('Erreur lors de la récupération des objets de jeu :', err);
+            socket.emit('errorMessage', 'Erreur lors de la récupération des objets de jeu');
+        }
+    });
 
-  socket.on('getPlayerPosition', async (characterId) => {
-    try {
-      const playerPosition = await db.collection('playerPositions').findOne({ playerId: characterId });
-      socket.emit('playerPosition', playerPosition);
-    } catch (err) {
-      console.error('Erreur lors de la récupération de la position du joueur :', err);
-      socket.emit('errorMessage', 'Erreur lors de la récupération de la position du joueur');
-    }
-  });
+    socket.on('giveStartingItems', async (characterId) => {
+        try {
+            const startingItems = [
+                { id: 1, name: 'Épée en bois', type: 'weapon', damage: 5, onclick: 'equip', description: 'Une épée en bois basique' },
+                { id: 2, name: 'Potion de soin', type: 'potion', heal: 10, onclick: 'consume', description: 'Une potion de soin basique' },
+            ];
+            await db.collection('inventories').insertOne({ playerId: characterId, items: startingItems });
+            socket.emit('startingItemsGiven', startingItems);
+        } catch (err) {
+            console.error('Erreur lors de l\'ajout des objets de départ :', err);
+            socket.emit('errorMessage', 'Erreur lors de l\'ajout des objets de départ');
+        }
+    });
 
-  socket.on('getCharacter', async (name) => {
-    try {
-      const character = await getCharacter(name);
-      socket.emit('character', character);
-    } catch (err) {
-      console.error('Erreur lors de la récupération du personnage :', err);
-      socket.emit('errorMessage', 'Erreur lors de la récupération du personnage');
-    }
-  });
+    socket.on('giveStartingGold', async (characterId) => {
+        try {
+            await db.collection('golds').insertOne({ playerId: characterId, amount: 100 });
+            socket.emit('startingGoldGiven', 100);
+        } catch (err) {
+            console.error('Erreur lors de l\'ajout de l\'or de départ :', err);
+            socket.emit('errorMessage', 'Erreur lors de l\'ajout de l\'or de départ');
+        }
+    });
 
-  socket.on('checkNameForLogin', async (name) => {
-    try {
-      const character = await getCharacter(name);
-      socket.emit('nameCheckedForLogin', character);
-    } catch (err) {
-      console.error('Erreur lors de la vérification du nom :', err);
-      socket.emit('errorMessage', 'Erreur lors de la vérification du nom');
-    }
-  });
-
+    socket.on('getPlayerPosition', async (characterId) => {
+        try {
+            const playerPosition = await db.collection('playerPositions').findOne({ playerId: characterId });
+            socket.emit('playerPosition', playerPosition);
+        } catch (err) {
+            console.error('Erreur lors de la récupération de la position du joueur :', err);
+            socket.emit('errorMessage', 'Erreur lors de la récupération de la position du joueur');
+        }
+    });
 });
 
 async function addCharacter(characterData) {

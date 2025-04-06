@@ -1,27 +1,30 @@
 {
-  "name": "mybankai",
+  "name": "terzawa",
   "version": "1.0.0",
-  "description": "Pour installer, il suffit de cloner le repository : git clone [lien du repo]\r Se rendre dans le dossier puis : npm install \r Ensuite, il faut installer mongodb si vous êtes sur windows (c'est pour cela que la db pointe sur 127.0.0.1 changer si changement d'installation)\r Une fois que tout cela est fait, lancer le serveur : node server.js",
-  "main": "server.js",
+  "description": "Jeu MMORPG Terzawa",
+  "main": "src/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "dev": "webpack serve --mode development",
+    "build": "webpack --mode production"
   },
+  "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@babel/core": "^7.26.10",
-    "@babel/preset-env": "^7.26.9",
-    "babel-loader": "^10.0.0",
-    "body-parser": "^1.20.2",
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "babel-loader": "^9.1.3",
+    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "mongodb": "^6.8.0",
-    "phaser": "^3.88.2",
-    "socket.io": "^4.7.5",
-    "socket.io-client": "^4.8.1",
-    "webpack": "^5.98.0",
-    "webpack-cli": "^6.0.1"
+    "express": "^5.1.0",
+    "mongodb": "^6.15.0",
+    "phaser": "^3.70.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.7.4",
+    "webpack": "^5.90.3",
+    "webpack-cli": "^5.1.4"
   },
-  "keywords": []
+  "devDependencies": {
+    "webpack-dev-server": "^5.2.1"
+  }
 }
